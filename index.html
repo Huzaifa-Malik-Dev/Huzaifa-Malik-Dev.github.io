@@ -1,0 +1,2272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Digitalcoo CRM — Demo (e& Channel Partner)</title>
+<style>
+:root{
+  --bg:#0f1623; --panel:#161f30; --panel2:#1d293d; --line:#2a3650;
+  --txt:#e7edf7; --muted:#93a1bd; --brand:#e30613; --brand2:#ff3b4e;
+  --green:#1db954; --amber:#f6b73c; --blue:#3b82f6; --purple:#8b5cf6;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+a{color:var(--brand2);text-decoration:none}
+.hidden{display:none!important}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:8px;padding:9px 14px;font-weight:600;font-size:13px}
+.btn-primary{background:var(--brand);color:#fff}
+.btn-primary:hover{background:var(--brand2)}
+.btn-ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
+.btn-ghost:hover{border-color:var(--brand2)}
+input,select,textarea{font-family:inherit;background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:13px;width:100%}
+input[type="date"]{color-scheme:dark;min-width:150px}
+input[type="date"]::-webkit-calendar-picker-indicator{opacity:.7;cursor:pointer}
+input[type="date"]::-webkit-calendar-picker-indicator:hover{opacity:1}
+label{display:block;font-size:12px;color:var(--muted);margin:8px 0 4px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;background:var(--panel)}
+tr:hover td{background:rgba(255,255,255,.02)}
+.tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.scroll{overflow:auto;max-height:62vh;border:1px solid var(--line);border-radius:var(--radius)}
+
+/* Login */
+#login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(1200px 600px at 70% -10%,#26344f,#0f1623)}
+.login-card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:34px;width:380px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.logo{font-weight:800;font-size:22px;letter-spacing:-.5px}
+.logo span{color:var(--brand2)}
+.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.role-btn{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:left;color:var(--txt)}
+.role-btn:hover{border-color:var(--brand2)}
+.role-btn b{display:block;font-size:13px}
+.role-btn small{color:var(--muted);font-size:11px}
+
+/* App shell */
+#app{display:none;grid-template-columns:230px 1fr;min-height:100vh}
+.side{background:var(--panel);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;color:var(--muted);font-weight:600;cursor:pointer;margin-bottom:2px}
+.nav-item:hover{background:var(--panel2);color:var(--txt)}
+.nav-item.active{background:var(--brand);color:#fff}
+.nav-item.current-group{background:transparent;color:var(--txt);border-left:3px solid var(--brand2);padding-left:9px}
+.nav-item .ic{width:18px;text-align:center}
+.nav-sub{padding-left:34px;font-size:13px;font-weight:500}
+/* Toggle switch — replaces native checkboxes in permission matrices */
+.tgl{position:relative;display:inline-block;width:38px;height:22px;vertical-align:middle}
+.tgl input{opacity:0;width:0;height:0;position:absolute}
+.tgl .slider{position:absolute;inset:0;background:var(--panel2);border:1px solid var(--line);border-radius:22px;cursor:pointer;transition:.15s}
+.tgl .slider:before{content:"";position:absolute;height:16px;width:16px;left:2px;top:2px;background:#93a1bd;border-radius:50%;transition:.15s}
+.tgl input:checked+.slider{background:rgba(227,6,19,.18);border-color:var(--brand)}
+.tgl input:checked+.slider:before{transform:translateX(16px);background:var(--brand)}
+.tgl input:disabled+.slider{opacity:.4;cursor:default}
+.nav-sec{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#5c6c8c;margin:14px 8px 6px}
+.profile-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:start}
+.main{padding:20px 26px;overflow:auto;height:100vh}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;border-bottom:3px solid var(--role,var(--brand));padding-bottom:12px}
+.rolepill{display:inline-block;background:var(--role,var(--brand));color:#fff;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.topbar h1{font-size:20px;margin:0}
+.who{display:flex;align-items:center;gap:10px}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--role,var(--brand));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+
+/* Cards / KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:18px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--role,var(--line));border-radius:var(--radius);padding:16px}
+.kpi.clickable{cursor:pointer;transition:transform .15s ease,border-color .15s ease}
+.kpi.clickable:hover{transform:translateY(-1px);border-color:var(--brand2)}
+.kpi .label{color:var(--muted);font-size:12px}
+.kpi .val{font-size:26px;font-weight:800;margin-top:4px}
+.kpi .sub{font-size:12px;margin-top:4px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.card h3{margin:0 0 12px;font-size:15px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.row>div{flex:1;min-width:140px}
+.bar{height:10px;background:var(--panel2);border-radius:6px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--green)}
+
+/* Pipeline kanban */
+.kanban{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;overflow-x:auto}
+.kcol{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px;min-height:120px}
+.kcol h4{font-size:11px;margin:4px 6px 8px;color:var(--muted)}
+.kcard{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--brand2);border-radius:8px;padding:8px;margin-bottom:7px;font-size:12px;cursor:grab}
+.kcard b{display:block;font-size:12px;margin-bottom:3px}
+.kcard small{color:var(--muted)}
+
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(5,8,15,.65);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;width:520px;max-height:88vh;overflow:auto}
+.muted{color:var(--muted)}
+.right{text-align:right}
+.pill-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{background:transparent;color:var(--muted);border-radius:0;padding:8px 14px}
+.seg button.on{background:var(--brand);color:#fff}
+.report{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:18px;line-height:1.6;font-size:13px}
+.report h2{font-size:16px;margin:0 0 4px}
+.report .meta{color:var(--muted);font-size:12px;margin-bottom:12px}
+.report ul{margin:6px 0 12px;padding-left:18px}
+.flag{padding:8px 12px;border-radius:8px;margin:6px 0;font-size:13px}
+.flag.good{background:rgba(29,185,84,.12);border-left:3px solid var(--green)}
+.flag.warn{background:rgba(246,183,60,.12);border-left:3px solid var(--amber)}
+.flag.bad{background:rgba(227,6,19,.14);border-left:3px solid var(--brand2)}
+.badge{font-size:10px;background:var(--purple);color:#fff;padding:1px 7px;border-radius:20px;margin-left:6px}
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.toolbar input,.toolbar select{width:auto}
+.demobar{background:rgba(246,183,60,.12);border:1px solid var(--amber);color:var(--amber);padding:9px 14px;border-radius:8px;font-size:12px;margin-bottom:14px;font-weight:600}
+tr.frow th{position:sticky;top:31px;background:var(--panel2);padding:4px 6px;z-index:1}
+input.colf{padding:4px 7px;font-size:11px;font-weight:400;background:var(--bg);border:1px solid var(--line)}
+input.colf::placeholder{color:#5c6c8c}
+.dupwarn{display:inline-block;color:#fff;background:var(--brand);border-radius:6px;padding:5px 8px;font-weight:700;cursor:pointer;margin-right:4px;font-size:12px}
+.kebab{padding:9px 11px}
+.menubackdrop{position:fixed;inset:0;z-index:60}
+.menucard{position:fixed;z-index:61;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:0 12px 34px rgba(0,0,0,.55);min-width:200px;padding:6px}
+.menucard .mi{display:block;width:100%;text-align:left;background:transparent;color:var(--txt);padding:9px 11px;border-radius:6px;font-weight:600;font-size:13px}
+.menucard .mi:hover{background:var(--panel2)}
+.menucard .mi.disabled{color:var(--muted);cursor:default}
+.bell{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:7px 11px;font-size:16px;cursor:pointer;margin-right:10px;color:var(--txt)}
+.bell:hover{border-color:var(--brand2)}
+.bellbadge{position:absolute;top:-7px;right:-7px;background:var(--brand);color:#fff;border-radius:20px;font-size:10px;font-weight:700;padding:1px 6px;min-width:18px;text-align:center;line-height:1.5}
+.chatbtn{position:relative;padding:8px 10px}
+.cbadge{position:absolute;top:-6px;right:-5px;background:var(--brand);color:#fff;border-radius:20px;font-size:9px;font-weight:700;padding:0 5px;line-height:16px;min-width:16px;text-align:center}
+.notifpanel{position:fixed;z-index:61;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.55);width:360px;max-height:64vh;overflow:auto;padding:8px}
+.notif{display:flex;gap:10px;padding:11px 10px;border-bottom:1px solid var(--line)}
+.notif.unread{background:rgba(227,6,19,.07)}
+.notif .dot{width:8px;height:8px;border-radius:50%;background:var(--brand2);margin-top:5px;flex:0 0 8px}
+.notif.read .dot{background:transparent;border:1px solid var(--line)}
+.notif small{color:var(--muted)}
+.toastwrap{position:fixed;right:18px;bottom:18px;z-index:80;display:flex;flex-direction:column;gap:10px}
+.toast{background:var(--panel);border:1px solid var(--brand2);border-left:4px solid var(--brand2);border-radius:10px;padding:12px 14px;width:330px;box-shadow:0 12px 30px rgba(0,0,0,.5);font-size:13px;animation:slidein .25s ease;transition:opacity .4s}
+.toast b{color:var(--brand2)}
+@keyframes slidein{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
+.drawerback{position:fixed;inset:0;background:rgba(5,8,15,.45);z-index:69}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:440px;max-width:94vw;background:var(--panel);border-left:1px solid var(--line);box-shadow:-14px 0 44px rgba(0,0,0,.55);z-index:70;display:flex;flex-direction:column;animation:slideright .22s ease}
+@keyframes slideright{from{transform:translateX(100%)}to{transform:none}}
+.drawer .dhead{padding:14px 16px;border-bottom:1px solid var(--line)}
+.drawer .dbody{flex:1;overflow:auto;padding:12px 14px}
+.drawer .dfoot{padding:12px 14px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
+.drawer .dfoot input{flex:1}
+.cmsg{margin:8px 0;text-align:left}
+.cmsg-me{margin:8px 0;text-align:right}
+.cmsg .bub,.cmsg-me .bub{display:inline-block;max-width:88%;padding:8px 11px;border-radius:12px;font-size:13px}
+.cmsg .bub{background:var(--panel2);border:1px solid var(--line);border-radius:12px 12px 12px 4px}
+.cmsg-me .bub{background:var(--brand);color:#fff;border-radius:12px 12px 4px 12px;text-align:left}
+.csys{text-align:center;margin:10px 0}
+.cfile{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 11px}
+.chip{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--txt);cursor:pointer}
+.chip:hover{border-color:var(--brand2);color:var(--brand2)}
+.mention{color:var(--brand2);font-weight:700}
+.login-demo{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.cred-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.mini-btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 9px;font-size:11px;text-align:left}
+.mini-btn:hover{border-color:var(--brand2)}
+.guide-list{margin:0;padding-left:18px;line-height:1.7}
+.demo-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.empty{padding:26px;text-align:center;color:var(--muted)}
+.ssel{position:relative}
+.ssel-inp{width:100%;background-image:none}
+.ssel-list{position:fixed;z-index:90;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,.55);max-height:230px;overflow:auto}
+.ssel-it{padding:8px 11px;font-size:13px;cursor:pointer;color:var(--txt)}
+.ssel-it:hover,.ssel-it.on{background:var(--panel2)}
+.ssel-it.muted{color:var(--muted);cursor:default}
+#agentFilter{display:flex;align-items:center}
+#agentFilter .ssel{width:180px}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="login">
+  <div class="login-card">
+    <div class="logo">Digi<span>coo</span> CRM</div>
+    <p class="muted" style="margin:6px 0 18px">e& Authorised Channel Partner — Operations Platform <span class="badge">DEMO</span></p>
+    <label>Sign in to your portal</label>
+    <div class="role-grid" id="roleGrid"></div>
+    <p class="muted" style="font-size:11px;margin-top:16px">Each user has their own login. Demo data only — your changes stay in this browser.</p>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app">
+  <aside class="side">
+    <div class="logo" style="font-size:18px;padding:6px 8px 14px">Digi<span>coo</span> CRM</div>
+    <div id="nav"></div>
+    <div style="margin-top:auto">
+      <div class="nav-item" onclick="openDemoGuide()"><span class="ic">?</span> Demo walkthrough</div>
+      <div class="nav-item" onclick="openScenarioMenu()"><span class="ic">*</span> Demo scenarios</div>
+      <div class="nav-item" onclick="resetDemo()"><span class="ic">↺</span> Reset demo data</div>
+      <div class="nav-item" onclick="logout()"><span class="ic">⎋</span> Switch role / Logout</div>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:16px"><h1 id="pageTitle">Dashboard</h1><div id="agentFilter"></div></div>
+      <div class="who">
+        <button class="bell" onclick="toggleNotif(event)" title="Notifications">🔔<span id="bellCount" class="bellbadge hidden">0</span></button>
+        <div class="right" style="cursor:pointer" onclick="myProfileModal()" title="My Profile"><div id="whoName" style="font-weight:700"></div><div class="muted" id="whoRole" style="font-size:12px"></div></div>
+        <div class="avatar" id="whoAv" style="cursor:pointer" onclick="myProfileModal()" title="My Profile">A</div>
+      </div>
+    </div>
+    <div class="demobar">⚠ DEMO — sample data only. Your changes are saved in your own browser and are not shared with others. Use “Reset demo data” anytime.</div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<div id="modalHost"></div>
+<div id="menuHost"></div>
+<div id="toastHost" class="toastwrap"></div>
+<div id="caseHost"></div>
+
+<script src="joydata.js"></script>
+<script>
+/* ============================================================
+   DIGITALCOO CRM — DEMO PROTOTYPE
+   Single-file. Data persists in browser (localStorage).
+   ============================================================ */
+
+const PIPE_STAGES = ["10%- Prospect","30% - Value Prop","50% - Negotiation","70% - Finalizing","90% - Closing","100% - Deal Won","0% - Lost"];
+const CALL_STATUS = ["Interested","FollowUp","Not interested","Using etisalat","Using DU","Voicemail","No answer","Number not in use"];
+const ORDER_STATUS = ["In Pipeline","Submitted","E& In-process","BO Pending","Waiting for Agent","Activated","Closed","On Hold","Cancelled","Returned"];
+const PRODUCTS = [
+  {id:"PR1", cat:"Fixed", title:"Business Pro New", mrc:0},
+  {id:"PR2", cat:"Fixed", title:"Business Pro Mig", mrc:0},
+  {id:"PR3", cat:"Fixed", title:"Business On New", mrc:0},
+  {id:"PR4", cat:"Fixed", title:"Business On Mig", mrc:0},
+  {id:"PR5", cat:"Fixed", title:"SOHO", mrc:0},
+  {id:"PR6", cat:"Fixed", title:"BQS", mrc:0},
+  {id:"PR7", cat:"Fixed", title:"Office Presence", mrc:0},
+  {id:"PR8", cat:"Fixed", title:"Dell / PABX", mrc:0},
+  {id:"PR9", cat:"Fixed", title:"Toll Free", mrc:0},
+  {id:"PR10", cat:"Fixed", title:"Digital Internet", mrc:0},
+  {id:"PR11", cat:"Fixed", title:"Digital Premium Internet", mrc:0},
+  {id:"PR12", cat:"Fixed", title:"SIP Trunk", mrc:0},
+  {id:"PR13", cat:"Fixed", title:"PRI", mrc:0},
+  {id:"PR14", cat:"Fixed", title:"SD WAN", mrc:0},
+  {id:"PR15", cat:"Fixed", title:"Business TV", mrc:0},
+  {id:"PR16", cat:"Fixed", title:"Business Flat Plus", mrc:0},
+  {id:"PR17", cat:"Fixed", title:"Business Super", mrc:0},
+  {id:"PR18", cat:"Fixed", title:"Add Lines", mrc:0},
+  {id:"PR19", cat:"Fixed", title:"Global MPLS", mrc:0},
+  {id:"PR20", cat:"Mobile", title:"ATL Plans", mrc:0},
+  {id:"PR21", cat:"Mobile", title:"BTL Plans", mrc:0},
+  {id:"PR22", cat:"Mobile", title:"Data Sims", mrc:0},
+  {id:"PR23", cat:"Digital", title:"UTAP", mrc:0},
+  {id:"PR24", cat:"Digital", title:"Office 365", mrc:0},
+  {id:"PR25", cat:"Digital", title:"Online Marketing", mrc:0},
+  {id:"PR26", cat:"Digital", title:"VSAAS", mrc:0},
+  {id:"PR27", cat:"Digital", title:"DGTX", mrc:0},
+  {id:"PR28", cat:"Digital", title:"M2M", mrc:0},
+  {id:"PR29", cat:"Digital", title:"SVT", mrc:0},
+  {id:"PR30", cat:"Digital", title:"APP 360", mrc:0},
+  {id:"PR31", cat:"Digital", title:"Social eCommerce", mrc:0},
+  {id:"PR32", cat:"Digital", title:"Cloud", mrc:0},
+  {id:"PR33", cat:"Digital", title:"SMS", mrc:0}
+];
+
+const ROLES = {
+  admin:       {name:"Administrator"},
+  sales_head:  {name:"Sales Head"},
+  teams_head:  {name:"Teams Head"},
+  team_leader: {name:"Team Leader"},
+  agent:       {name:"Sales Agent"},
+  backoffice:  {name:"Back Office"},
+  accountant:  {name:"Accountant"},
+  hr:          {name:"HR"}
+};
+// Default module access per role — EDITABLE by Admin at runtime (stored in DB.access)
+const ACCESS_DEFAULT = {
+  admin:      ["dash","dsr","pipeline","backoffice","mis","hr","payroll","accounting","ai","admin"],
+  sales_head: ["dash","pipeline","mis","ai"],
+  teams_head: ["dash","pipeline","mis","ai"],
+  team_leader:["dash","dsr","pipeline","mis","ai"],
+  agent:      ["dash","dsr","pipeline"],
+  backoffice: ["dash","backoffice","mis","ai"],
+  accountant: ["dash","accounting","payroll","ai"],
+  hr:         ["dash","hr","payroll","ai"]
+};
+// Default EDIT/CREATE access per role — EDITABLE by Admin at runtime (stored in DB.editAccess)
+// Symmetric to ACCESS_DEFAULT (which is "View"). Only modules with mutating actions appear here —
+// dash/mis/ai are pure reports. Defaults are chosen to exactly preserve pre-refactor behavior:
+// hr/payroll/accounting/admin mirror the old manage_users/run_payroll/manage_accounts/manage_access
+// defaults; dsr/pipeline/backoffice were previously ungated, so their edit default matches their
+// current view list (nothing changes today — Admin can tighten it live from here on).
+const EDIT_ACCESS_DEFAULT = {
+  admin:      ["dsr","pipeline","backoffice","hr","payroll","accounting","admin"],
+  sales_head: ["pipeline"],
+  teams_head: ["pipeline"],
+  team_leader:["dsr","pipeline"],
+  agent:      ["dsr","pipeline"],
+  backoffice: ["backoffice"],
+  accountant: ["payroll","accounting"],
+  hr:         []
+};
+const EDIT_MODS=["dsr","pipeline","backoffice","hr","payroll","accounting","admin"];
+
+const NAVDEF = {
+  dash:{t:"Dashboard",ic:"▣"}, dsr:{t:"DSR — Agent",ic:"☎"},
+  pipeline:{t:"Sales Pipeline",ic:"⚲"}, backoffice:{t:"Back Office / Orders",ic:"☑"},
+  mis:{t:"MIS & Targets",ic:"▦"},
+  hr:{t:"HR",ic:"❖",subs:[{key:"all",t:"All Employees"},{key:"active",t:"Active Employees"},{key:"passport",t:"Passport Management"}]},
+  payroll:{t:"Payroll",ic:"₳",subs:[{key:"run",t:"Payroll Run"},{key:"ledger",t:"Employee Ledger"}]},
+  accounting:{t:"Accounting",ic:"₿",subs:[{key:"pl",t:"P&L & VAT"},{key:"coa",t:"Chart of Accounts"},{key:"cheques",t:"Cheques"}]},
+  ai:{t:"AI Reports",ic:"✦"},
+  admin:{t:"Admin / Settings",ic:"⚙",subs:[{key:"roles",t:"Roles & Permissions"},{key:"people",t:"People"},{key:"users",t:"Users"},{key:"products",t:"Products & Segments"}]}
+};
+
+/* ---------- Seed data ---------- */
+function seed(){
+  const employees=[
+    // Agents (reportsTo = their Team Leader)
+    {id:"E01",name:"Hira",role:"agent",desig:"Sales Agent",tl:"Joy",reportsTo:"Joy",target:5000,salary:4000,join:"2026-01-05",dept:"e& Sales"},
+    {id:"E02",name:"Vani",role:"agent",desig:"Sales Agent",tl:"Joy",reportsTo:"Joy",target:5000,salary:4000,join:"2026-01-15",dept:"e& Sales"},
+    {id:"E03",name:"OB",role:"agent",desig:"Sales Agent",tl:"Maria",reportsTo:"Maria",target:7000,salary:4500,join:"2025-11-10",dept:"e& Sales"},
+    {id:"E04",name:"Samjith",role:"agent",desig:"Sr. Sales Agent",tl:"Maria",reportsTo:"Maria",target:6000,salary:5000,join:"2025-09-01",dept:"e& Sales"},
+    {id:"E05",name:"Kiran",role:"agent",desig:"Sales Agent",tl:"Rahul",reportsTo:"Rahul",target:5000,salary:4000,join:"2026-02-01",dept:"e& Sales"},
+    {id:"E15",name:"Naushad",role:"agent",desig:"Sales Agent",tl:"Joy",reportsTo:"Joy",target:5000,salary:4000,join:"2026-05-01",dept:"e& Sales"},
+    {id:"E16",name:"Obina",role:"agent",desig:"Sales Agent",tl:"Joy",reportsTo:"Joy",target:5000,salary:4000,join:"2026-02-01",dept:"e& Sales"},
+    // Team Leaders (reportsTo = Teams Head)
+    {id:"E06",name:"Joy",role:"team_leader",desig:"Team Leader — Team A",tl:"-",reportsTo:"Sana",target:25000,salary:8000,join:"2025-06-01",dept:"e& Sales"},
+    {id:"E07",name:"Maria",role:"team_leader",desig:"Team Leader — Team B",tl:"-",reportsTo:"Sana",target:30000,salary:8500,join:"2025-03-01",dept:"e& Sales"},
+    {id:"E08",name:"Rahul",role:"team_leader",desig:"Team Leader — Team C",tl:"-",reportsTo:"Sana",target:20000,salary:8000,join:"2026-01-20",dept:"e& Sales"},
+    // Teams Head (reportsTo = Sales Head) — can be multiple
+    {id:"E09",name:"Sana",role:"teams_head",desig:"Teams Head — Group 1",tl:"-",reportsTo:"Amir Qadri",target:75000,salary:12000,join:"2025-02-01",dept:"e& Sales"},
+    // Sales Head (top of sales)
+    {id:"E10",name:"Amir Qadri",role:"sales_head",desig:"Sales Head",tl:"-",reportsTo:"-",target:150000,salary:20000,join:"2025-01-01",dept:"e& Sales"},
+    // Support functions
+    {id:"E11",name:"Ansari",role:"backoffice",desig:"Back Office Executive",tl:"-",reportsTo:"Amir Qadri",target:0,salary:5500,join:"2025-08-01",dept:"Operations"},
+    {id:"E12",name:"ABC",role:"accountant",desig:"Accountant",tl:"-",reportsTo:"Admin",target:0,salary:9000,join:"2025-05-01",dept:"Finance"},
+    {id:"E13",name:"Fatima",role:"hr",desig:"HR Officer",tl:"-",reportsTo:"Admin",target:0,salary:8500,join:"2025-04-01",dept:"HR"},
+    {id:"E14",name:"Admin",role:"admin",desig:"System Administrator",tl:"-",reportsTo:"-",target:0,salary:0,join:"2025-01-01",dept:"Management"}
+  ];
+  employees.forEach(e=>{ e.username=defUser(e.name); e.password=defUser(e.name)+"@2026"; });
+  // ---- HR compliance profile defaults (UAE docs) — every employee gets a baseline, a few are deliberately
+  // expired/expiring/missing below so the Compliance column in HR demonstrates all badge states.
+  employees.forEach(e=>{
+    Object.assign(e,{
+      active:true, email:defUser(e.name)+"@digitalcoo.ae", phone:"+9715"+(20000000+parseInt(e.id.replace(/\D/g,""),10)*137),
+      dob:"1992-04-12", nationality:"India", profilePic:"",
+      passportNo:"P"+e.id+"1234", passportExpiry:"2029-01-01", passportImg:"",
+      visaCompany:"Digitalcoo Technologies LLC", visaExpiry:"2027-06-01", visaImg:"",
+      eid:"784-1992-"+e.id.replace(/\D/g,"")+"901-1", eidIssue:"2024-01-01", eidExpiry:"2027-06-01", eidImgF:"", eidImgB:"",
+      labourCardNo:"LC-"+e.id, labourCardIssue:"2024-01-01", labourCardExpiry:"2027-06-01", labourCardImg:"",
+      insuranceIssue:"2026-01-01", insuranceExpiry:"2027-01-01", insuranceImgF:"", insuranceImgB:"",
+      legalCase:"None"
+    });
+  });
+  const empByName=n=>employees.find(x=>x.name===n);
+  Object.assign(empByName("Hira")||{}, {eidExpiry:"2026-07-20"});             // expiring within 30 days
+  Object.assign(empByName("Vani")||{}, {passportExpiry:"2026-05-01"});        // already expired
+  Object.assign(empByName("OB")||{}, {labourCardNo:"", labourCardExpiry:""}); // missing document
+  const companies=["PURE EARTH EQUIPMENT","LUTECH COMPOSITES","AL SAMIAH CARPETS","DARK REAL ESTATE","TRUSV AIR DUCT","PACKNEXA INDUSTRIES","MEAMAR BUILDING","SUNLUX ELECTROMECH","TECTONIC ELECTROMECH","SKY & SEA INTL","BRAVA TECHNO","IPS CERTIFICATION","LIVENDO PROPERTIES","AENAV","ORTEK MEDICAL","CAPITAL ZONE DELIVERY","AL REWAYA TYPING","QABIL GROUP","SMART SENSE SUPPLIES","WEST ONE TRADING"];
+  const agents=["Hira","Vani","OB","Samjith","Kiran"];
+  const tlMap={Hira:"Joy",Vani:"Joy",OB:"Maria",Samjith:"Maria",Kiran:"Rahul"};
+  const dsr=[], pipeline=[], orders=[];
+  let pno=1, ono=1, seq=0;
+  const dno=()=>"DSR-"+String(++seq).padStart(5,'0');
+  const remarks=["Using etisalat already","He is busy, call later","Interested in 3 SIM cards","Wants data plan 30GB","Voicemail left","Asked to send proposal","Number not in use","Already with DU wireless"];
+  for(let i=0;i<90;i++){
+    const ag=agents[i%agents.length];
+    const st=CALL_STATUS[i%CALL_STATUS.length];
+    const d=new Date(2026,5,1+ (i%24));
+    dsr.push({id:"D"+(i+1),dsrNo:dno(),date:d.toISOString().slice(0,10),agent:ag,tl:tlMap[ag],company:companies[i%companies.length]+" "+(i+1),building:["Abdul Razaq Ali","Bin Dasmal","Microbuilt","Advance Tech"][i%4],contactNo:"9715"+(20000000+i*131),customer:["Mr Ali","Anjlika","Usman","Eylan","Neha","Akbar"][i%6],status:st,remarks:remarks[i%remarks.length],connected:(st==="No answer"||st==="Voicemail")?"NO":"YES",history:[{ts:d.toLocaleDateString('en-GB')+" 09:00",user:ag,stage:"DSR",text:"DSR created · status set to "+st}]});
+  }
+  // Inject a few cross-agent duplicates (same company + number called later by another agent) to demonstrate the duplicate alert
+  [[3,"Vani"],[10,"OB"],[18,"Samjith"],[25,"Hira"]].forEach(([idx,ag2],k)=>{
+    const src=dsr[idx];
+    dsr.unshift({id:"DUP"+k,dsrNo:dno(),date:"2026-06-2"+(2+k),agent:ag2,tl:tlMap[ag2],company:src.company,building:src.building,contactNo:src.contactNo,customer:src.customer,status:"FollowUp",remarks:"Re-contacting same company",connected:"YES",history:[{ts:"2"+(2+k)+" Jun 2026 10:00",user:ag2,stage:"DSR",text:"DSR created · status set to FollowUp"}]});
+  });
+  // ---- Real imported Joy-team DSR data (Naushad, Obina, Vani) from uploaded sheets ----
+  if(typeof window!=="undefined" && Array.isArray(window.JOY_IMPORT)){
+    window.JOY_IMPORT.forEach(row=>{
+      const no=dno();
+      dsr.push({id:"IMP"+seq,dsrNo:no,date:row.d||"",agent:row.a,tl:"Joy",company:row.co||"",building:"",contactNo:row.cn||"",customer:row.cu||"",status:row.s||"No status",remarks:row.r||"",connected:row.x||"",imported:true,history:[{ts:(row.d||"")+" 09:00",user:row.a,stage:"DSR",text:"DSR imported · status "+(row.s||"")}]});
+    });
+  }
+  for(let i=0;i<22;i++){
+    const ag=agents[i%agents.length];
+    const pr=PRODUCTS[i%PRODUCTS.length];
+    const qty=1+(i%6); const price=[100,150,200,395,475,600][i%6]; const mrc=qty*price;
+    pipeline.push({id:"P"+(pno++),dsrNo:dno(),date:"2026-06-"+String(2+i%26).padStart(2,'0'),cp:"DIGI COO",customer:["Mr Jarien","Akbar","Mr Jahir","Anjlika","Usman","Eylan","Mr Ali"][i%7],company:companies[i%companies.length]+" "+(i+1),cat:pr.cat,product:pr.title,price:price,qty:qty,mrc:mrc,annual:mrc*12,stage:PIPE_STAGES[i%PIPE_STAGES.length],agent:ag,tl:tlMap[ag],escalated:false,remarks:remarks[i%remarks.length]});
+  }
+  for(let i=0;i<30;i++){
+    const ag=agents[i%agents.length];
+    const pr=PRODUCTS[i%PRODUCTS.length];
+    const qty=1+(i%8); const price=[100,200,300,395,600][i%5]; const mrc=qty*price;
+    const st=ORDER_STATUS[i%ORDER_STATUS.length];
+    const sub=new Date(2026,4+(i%2),2+(i%26));
+    orders.push({id:"O"+(ono++),dsrNo:dno(),subDate:sub.toISOString().slice(0,10),contact:["Amer","MD Armanul","Qasim","Ali","Neha"][i%5],contactNo:"58"+(2000000+i),customer:companies[i%companies.length]+" "+(i+1),pid:"535"+(50000+i),ord:"ORD-44"+(70000+i)+"-X"+i,eOrderNo:(st==="Activated"||st==="Closed"||st==="E& In-process")?"EAND-"+(900000+i):"",sr:i%2?"NEW":"MNP",cat:pr.cat,product:pr.title,contract:"12 Months",qty:qty,mrc:mrc,agent:ag,tl:tlMap[ag],eAcctMgr:"Ankit",status:st,actDate:(st==="Activated"||st==="Closed")?new Date(2026,5,3+i%25).toISOString().slice(0,10):"",commission:Math.round(mrc*0.15),remarks:st==="On Hold"?"Awaiting documents":st==="Cancelled"?"Customer withdrew":""});
+  }
+  const invoices=[
+    {id:"INV-2601",date:"2026-04-30",party:"e& (Etisalat)",type:"Commission Income",net:48500,vat:2425,total:50925,status:"Paid"},
+    {id:"INV-2602",date:"2026-05-31",party:"e& (Etisalat)",type:"Commission Income",net:53200,vat:2660,total:55860,status:"Paid"},
+    {id:"INV-2603",date:"2026-06-20",party:"e& (Etisalat)",type:"Commission Income",net:41750,vat:2087.5,total:43837.5,status:"Outstanding"},
+    {id:"BILL-118",date:"2026-06-05",party:"Office Rent - Business Bay",type:"Expense",net:18000,vat:900,total:18900,status:"Paid"},
+    {id:"BILL-119",date:"2026-06-10",party:"Telecom & Internet",type:"Expense",net:3200,vat:160,total:3360,status:"Paid"}
+  ];
+  // ---- Employee Ledger (advances / loans / deductions — feeds Payroll) ----
+  const ledger=[
+    {id:"L1",emp:"Vani",date:"2026-05-01",type:"Advance",amount:3000,installment:750,remaining:1500,status:"Open",note:"Advance for personal emergency",createdBy:"Ansari"},
+    {id:"L1D1",emp:"Vani",date:"2026-05-31",type:"Deduction",amount:750,installment:0,remaining:0,status:"Settled",note:"Payroll deduction — May 2026",createdBy:"system",parentId:"L1"},
+    {id:"L1D2",emp:"Vani",date:"2026-06-30",type:"Deduction",amount:750,installment:0,remaining:0,status:"Settled",note:"Payroll deduction — June 2026",createdBy:"system",parentId:"L1"},
+    {id:"L2",emp:"Hira",date:"2026-01-10",type:"Loan",amount:2000,installment:500,remaining:0,status:"Settled",note:"Laptop loan — fully repaid",createdBy:"Ansari"}
+  ];
+  const payrollRuns=[];
+  // ---- Chart of Accounts (real bank/cash accounts; AR/AP are computed roll-ups from invoices) ----
+  const accounts=[
+    {id:"ACC1",name:"Main Bank Account — ADCB",type:"Bank",opening:50000},
+    {id:"ACC2",name:"Petty Cash",type:"Cash",opening:5000}
+  ];
+  const accountTx=[
+    {id:"TX1",date:"2026-04-30",account:"ACC1",type:"Invoice Payment",amount:50925,note:"INV-2601 received",refId:"INV-2601"},
+    {id:"TX2",date:"2026-05-31",account:"ACC1",type:"Invoice Payment",amount:55860,note:"INV-2602 received",refId:"INV-2602"},
+    {id:"TX3",date:"2026-06-05",account:"ACC1",type:"Invoice Payment",amount:-18900,note:"BILL-118 paid — Office Rent",refId:"BILL-118"},
+    {id:"TX4",date:"2026-06-10",account:"ACC1",type:"Invoice Payment",amount:-3360,note:"BILL-119 paid — Telecom & Internet",refId:"BILL-119"},
+    {id:"TX5",date:"2026-06-01",account:"ACC1",type:"Cheque Clearance",amount:9500,note:"CHQ3 cleared — Sky & Sea Intl",refId:"CHQ3"}
+  ];
+  // ---- Cheques (PDC) management — one of each status to demo the full lifecycle ----
+  const cheques=[
+    {id:"CHQ1",no:"000123",date:"2026-06-01",dueDate:"2026-07-15",direction:"Received",party:"Livendo Properties",amount:12000,account:"ACC1",status:"Pending",note:"Advance payment for annual contract"},
+    {id:"CHQ2",no:"000456",date:"2026-06-05",dueDate:"2026-07-01",direction:"Issued",party:"Business Bay Landlord",amount:18000,account:"ACC1",status:"Deposited",note:"July office rent"},
+    {id:"CHQ3",no:"000789",date:"2026-05-01",dueDate:"2026-06-01",direction:"Received",party:"Sky & Sea Intl",amount:9500,account:"ACC1",status:"Cleared",note:"Order settlement"},
+    {id:"CHQ4",no:"000321",date:"2026-05-10",dueDate:"2026-06-10",direction:"Issued",party:"IT Vendor — Laptops",amount:7200,account:"ACC1",status:"Bounced",note:"Insufficient funds — follow up required"}
+  ];
+  const access=JSON.parse(JSON.stringify(ACCESS_DEFAULT));
+  const editAccess=JSON.parse(JSON.stringify(EDIT_ACCESS_DEFAULT));
+  const notifications=[
+    {id:"N1",ts:"24 Jun 2026 09:10",to:["Joy"],text:"New DSR DSR-00012 by Hira — LIVENDO PROPERTIES (Interested)",read:false,dsrNo:"DSR-00012"},
+    {id:"N2",ts:"24 Jun 2026 09:35",to:["Ansari"],text:"New order DSR-00118 from Vani — ready to process",read:false,dsrNo:"DSR-00118"},
+    {id:"N3",ts:"23 Jun 2026 16:00",to:["Amir Qadri","Sana"],text:"Deal DSR-00007 escalated by Hira",read:true,dsrNo:"DSR-00007"}
+  ];
+  const products=JSON.parse(JSON.stringify(PRODUCTS));
+  const threads={"DSR-00091":[
+    {ts:"24 Jun 2026 10:05",user:"Vani",role:"agent",type:"msg",text:"Customer asked for a revised quote with 5 SIM cards."},
+    {ts:"24 Jun 2026 10:20",user:"Ansari",role:"backoffice",type:"msg",text:"Noted — please share the trade license to proceed."},
+    {ts:"24 Jun 2026 10:22",user:"Vani",role:"agent",type:"file",file:"trade-license.pdf",text:""}
+  ]};
+  return {employees,dsr,pipeline,orders,invoices,notifications,products,threads,access,editAccess,userAccess:{},userEditAccess:{},ledger,payrollRuns,accounts,accountTx,cheques,counters:{dsr:seq}};
+}
+
+const DBKEY="digicoo_db_v11";
+let DB = load();
+function load(){ try{const s=localStorage.getItem(DBKEY); if(s){const d=JSON.parse(s); if(!d.access)d.access=JSON.parse(JSON.stringify(ACCESS_DEFAULT)); if(!d.editAccess)d.editAccess=JSON.parse(JSON.stringify(EDIT_ACCESS_DEFAULT)); Object.keys(EDIT_ACCESS_DEFAULT).forEach(r=>{ if(!d.editAccess[r]) d.editAccess[r]=JSON.parse(JSON.stringify(EDIT_ACCESS_DEFAULT[r])); }); if(!d.userAccess)d.userAccess={}; if(!d.userEditAccess)d.userEditAccess={}; if(!d.counters)d.counters={dsr:(d.dsr?d.dsr.length:0)}; if(!d.notifications)d.notifications=[]; if(!d.products || d.products.length<10 || d.products.some(p=>/Business First Plus|Business Extreme|SOHO3|Business On4|IP Connect Access5/.test(p.title))) d.products=JSON.parse(JSON.stringify(PRODUCTS)); if(!d.threads)d.threads={}; if(!d.ledger)d.ledger=[]; if(!d.payrollRuns)d.payrollRuns=[]; if(!d.accounts||!d.accounts.length)d.accounts=[{id:"ACC1",name:"Main Bank Account — ADCB",type:"Bank",opening:50000},{id:"ACC2",name:"Petty Cash",type:"Cash",opening:5000}]; if(!d.accountTx)d.accountTx=[]; if(!d.cheques)d.cheques=[]; if(d.employees)d.employees.forEach(e=>{ if(!e.username)e.username=defUser(e.name); if(!e.password)e.password=defUser(e.name)+"@2026"; if(e.legalCase===undefined){ Object.assign(e,{dob:e.dob||"",nationality:e.nationality||"",profilePic:e.profilePic||"",passportNo:e.passportNo||"",passportExpiry:e.passportExpiry||"",passportImg:e.passportImg||"",visaCompany:e.visaCompany||"",visaExpiry:e.visaExpiry||"",visaImg:e.visaImg||"",eid:e.eid||"",eidIssue:e.eidIssue||"",eidExpiry:e.eidExpiry||"",eidImgF:e.eidImgF||"",eidImgB:e.eidImgB||"",labourCardNo:e.labourCardNo||"",labourCardIssue:e.labourCardIssue||"",labourCardExpiry:e.labourCardExpiry||"",labourCardImg:e.labourCardImg||"",insuranceIssue:e.insuranceIssue||"",insuranceExpiry:e.insuranceExpiry||"",insuranceImgF:e.insuranceImgF||"",insuranceImgB:e.insuranceImgB||"",legalCase:e.legalCase||"None"}); } if(e.active===undefined)e.active=true; if(e.email===undefined)e.email=""; if(e.phone===undefined)e.phone=""; }); return d;}}catch(e){} const d=seed(); localStorage.setItem(DBKEY,JSON.stringify(d)); return d; }
+function save(){ localStorage.setItem(DBKEY,JSON.stringify(DB)); try{ if(BC) BC.postMessage({t:Date.now()}); }catch(e){} }
+// Permanent, never-reused DSR reference number — routed across DSR → Pipeline → Back Office
+function nextDsrNo(){ DB.counters.dsr=(DB.counters.dsr||0)+1; return "DSR-"+String(DB.counters.dsr).padStart(5,'0'); }
+const dsrSeqNum=no=>parseInt(String(no||"").replace(/\D/g,""))||0;
+// ---- Audit log / change history (immutable trail) ----
+const nowTs=()=>new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+function addLog(entry,text,stage){ if(!entry)return; (entry.history=entry.history||[]).push({ts:nowTs(),user:(SESSION&&SESSION.name)||'system',stage:stage||'DSR',text}); }
+function logByDsrNo(no,text,stage){
+  const d=DB.dsr.find(x=>x.dsrNo===no);
+  if(d){ addLog(d,text,stage); }
+  else { DB.threads=DB.threads||{}; (DB.threads[no]=DB.threads[no]||[]).push({ts:nowTs(),user:(SESSION&&SESSION.name)||"system",role:"system",type:"sys",stage:stage||"Update",text}); }
+}
+function resetDemo(){
+  if(confirm("Reset all demo data to the clean sample scenario?")){
+    DB=seed(); save();
+    if(SESSION){ DATE_FILTER="all"; renderNav(); render(); }
+    else renderLogin();
+  }
+}
+function openDemoGuide(){
+  openModalInfo("Demo walkthrough",`
+    <ol class="guide-list">
+      <li><b>Agent:</b> start as Vani, open DSR, log or update an interested call, then convert it to Pipeline.</li>
+      <li><b>Team Leader:</b> switch to Joy, review the highlighted deal, approve it, and open the shared case thread.</li>
+      <li><b>Back Office:</b> switch to Ansari, process the approved order, add PID / e& order number, then mark activation.</li>
+      <li><b>Management:</b> switch to Amir Qadri to review dashboard, MIS, pipeline forecast, and AI report.</li>
+      <li><b>Admin:</b> switch to Admin to show editable module access, granular permissions, products, and user credentials.</li>
+    </ol>
+    <div class="demo-actions">
+      <button class="btn-primary" onclick="loadDemoScenario('agent')">Start as Agent</button>
+      <button class="btn-ghost" onclick="loadDemoScenario('tl')">TL approval queue</button>
+      <button class="btn-ghost" onclick="loadDemoScenario('bo')">Back Office queue</button>
+      <button class="btn-ghost" onclick="loadDemoScenario('sales')">Sales Head view</button>
+    </div>`);
+}
+function openScenarioMenu(){
+  openModalInfo("Demo scenarios",`
+    <p class="muted" style="margin-top:0">Load a clean data set and jump directly to the role/view you want to present.</p>
+    <div class="demo-actions">
+      <button class="btn-primary" onclick="loadDemoScenario('agent')">Agent calling flow</button>
+      <button class="btn-ghost" onclick="loadDemoScenario('tl')">Team Leader approvals</button>
+      <button class="btn-ghost" onclick="loadDemoScenario('bo')">Back Office processing</button>
+      <button class="btn-ghost" onclick="loadDemoScenario('sales')">Sales Head dashboard</button>
+      <button class="btn-ghost" onclick="loadDemoScenario('admin')">Admin / RBAC setup</button>
+    </div>`);
+}
+function loadDemoScenario(key){
+  const map={
+    agent:{name:"Vani",view:"dsr",date:"all",label:"Agent calling flow"},
+    tl:{name:"Joy",view:"pipeline",date:"all",label:"Team Leader approvals"},
+    bo:{name:"Ansari",view:"backoffice",date:"all",label:"Back Office processing"},
+    sales:{name:"Amir Qadri",view:"dash",date:"all",label:"Sales Head dashboard"},
+    admin:{name:"Admin",view:"admin",date:"all",label:"Admin / RBAC setup"}
+  };
+  const s=map[key]||map.agent;
+  const e=DB.employees.find(x=>x.name===s.name);
+  if(!e){ alert("Demo user not found: "+s.name); return; }
+  DB=seed(); save(); closeModal(); doLogin(e.role,e.name);
+  CURRENT=s.view; DATE_FILTER=s.date||"all"; AGENT_FILTER=""; renderNav(); render(); toast("Scenario loaded: "+s.label);
+}
+
+let SESSION=null;
+let CURRENT="dash";
+let HR_SUB="all";
+let EMP_PAGE=null;
+let ADMIN_SUB="roles";
+let ADMIN_PICK=null;
+let DSR_PAGE=null;
+let DEAL_PAGE=null;
+let ORDER_PAGE=null;
+
+/* ============================================================
+   LIVE SYNC + NOTIFICATIONS
+   Cross-tab real-time via BroadcastChannel (+ storage fallback).
+   In production this layer is replaced by server push (WebSocket).
+   ============================================================ */
+var BC=null, toastedIds=new Set(), CASE_OPEN=null, SEEN={}, AGENT_FILTER="", DATE_FILTER="all", DATE_FROM="", DATE_TO="";
+try{ BC=new BroadcastChannel("digicoo_crm_"+DBKEY); BC.onmessage=onRemoteChange; }catch(e){}
+try{ window.addEventListener("storage",e=>{ if(e.key===DBKEY) onRemoteChange(); }); }catch(e){}
+function onRemoteChange(){
+  try{ const s=localStorage.getItem(DBKEY); if(s) DB=JSON.parse(s); }catch(e){ return; }
+  if(!SESSION) return;
+  renderBell();
+  myNotifs().filter(n=>!n.read && !toastedIds.has(n.id)).forEach(n=>{ toastedIds.add(n.id); toast(n.text, n.dsrNo); });
+  render(); // live-refresh dashboard / current view
+  if(CASE_OPEN) openCase(CASE_OPEN); // live-refresh open case chat
+}
+function empBy(name){ return DB.employees.find(e=>e.name===name); }
+function mgmtChain(agentName){
+  const a=empBy(agentName)||{};
+  const tl=(a.tl&&a.tl!=="-")?a.tl:null;
+  const th=tl?((empBy(tl)||{}).reportsTo||null):null;
+  const sh=(DB.employees.find(e=>e.role==="sales_head")||{}).name||null;
+  return [tl,th,sh].filter(Boolean);
+}
+const backOfficeNames=()=>DB.employees.filter(e=>e.role==="backoffice").map(e=>e.name);
+const salesHeadName=()=>(DB.employees.find(e=>e.role==="sales_head")||{}).name;
+function notify(toNames,text,meta){
+  toNames=[...new Set((toNames||[]).filter(Boolean))];
+  if(!toNames.length) return;
+  DB.notifications=DB.notifications||[];
+  DB.notifications.unshift({id:"N"+Date.now()+Math.floor(Math.random()*1000),ts:nowTs(),to:toNames,text,read:false,...(meta||{})});
+}
+function myNotifs(){ return (DB.notifications||[]).filter(n=>n.to&&SESSION&&n.to.includes(SESSION.name)); }
+function renderBell(){
+  const el=document.getElementById("bellCount"); if(!el||!SESSION) return;
+  const u=myNotifs().filter(n=>!n.read).length;
+  if(u>0){ el.textContent=u>99?"99+":String(u); el.classList.remove("hidden"); }
+  else el.classList.add("hidden");
+}
+function toggleNotif(ev){
+  if(ev) ev.stopPropagation();
+  const list=myNotifs();
+  const body=list.length
+    ? list.slice(0,40).map(n=>`<div class="notif ${n.read?'read':'unread'}" style="cursor:${n.dsrNo?'pointer':'default'}" onclick="notifClick('${n.id}')"><div class="dot"></div><div style="flex:1"><div>${n.text}</div><small>${n.ts}${n.dsrNo?' · <span style="color:var(--brand2)">open chat ›</span>':''}</small></div></div>`).join("")
+    : '<p class="muted" style="padding:16px">No notifications yet.</p>';
+  document.getElementById("menuHost").innerHTML=`<div class="menubackdrop" onclick="closeMenu()"></div>
+    <div class="notifpanel" style="right:24px;top:62px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px 10px">
+        <b>Notifications</b>${list.some(n=>!n.read)?'<button class="btn-ghost" style="padding:4px 10px" onclick="markAllRead()">Mark all read</button>':''}
+      </div>${body}</div>`;
+  // opening marks them read
+  list.forEach(n=>n.read=true); save(); renderBell();
+}
+function markAllRead(){ myNotifs().forEach(n=>n.read=true); save(); renderBell(); closeMenu(); }
+function notifClick(id){
+  const n=(DB.notifications||[]).find(x=>x.id===id);
+  closeMenu();
+  if(n){ n.read=true; save(); renderBell(); if(n.dsrNo) openCase(n.dsrNo); }
+}
+function toast(text,dsrNo){
+  const host=document.getElementById("toastHost"); if(!host) return;
+  const d=document.createElement("div"); d.className="toast";
+  if(dsrNo){ d.style.cursor="pointer"; d.onclick=()=>{ d.remove(); openCase(dsrNo); }; }
+  d.innerHTML=`<b>🔔 New notification</b><div style="margin-top:4px">${text}</div>${dsrNo?'<div><small style="color:var(--brand2)">click to open chat ›</small></div>':''}`;
+  host.appendChild(d);
+  setTimeout(()=>{ d.style.opacity="0"; setTimeout(()=>d.remove(),400); }, 6500);
+}
+
+/* ---------- Helpers ---------- */
+const AED=n=>"AED "+Math.round(n||0).toLocaleString();
+const $=id=>document.getElementById(id);
+function downloadText(filename,text,type="text/plain;charset=utf-8"){
+  const blob=new Blob([text],{type}); const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+function csvCell(v){ v=String(v??""); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function toCsv(rows){ return rows.map(r=>r.map(csvCell).join(",")).join("\n"); }
+function exportDSR(){
+  const dr=dsrDateRange();
+  const rows=DB.dsr.filter(d=>recVisible(d) && d.date && d.date>=dr.from && d.date<=dr.to).map(d=>[d.dsrNo,d.date,d.agent,d.tl,d.company,d.contactNo,d.customer,d.status,d.connected,d.converted?"In Pipeline":"",d.remarks]);
+  downloadText("digitalcoo-dsr.csv",toCsv([["DSR No","Date","Agent","TL","Company","Contact No","Customer","Status","Connected","Pipeline","Remarks"],...rows]),"text/csv;charset=utf-8");
+}
+function exportBackoffice(){
+  const rows=DB.orders.filter(recVisible).map(o=>[o.dsrNo,o.subDate,o.customer,o.product,o.qty,o.mrc,o.agent,o.pid,o.eOrderNo,o.status,o.actDate,o.remarks]);
+  downloadText("digitalcoo-orders.csv",toCsv([["DSR No","Sub Date","Customer","Product","Qty","MRC","Agent","PID","e& Order No","Status","Activated","Remarks"],...rows]),"text/csv;charset=utf-8");
+}
+function exportMIS(){
+  const rows=visibleAgents().map(a=>{ const emp=DB.employees.find(e=>e.name===a)||{}; const ord=DB.orders.filter(o=>o.agent===a && recVisible(o)); const sub=ord.reduce((s,o)=>s+o.mrc,0); const act=ord.filter(o=>o.status==="Activated"||o.status==="Closed").reduce((s,o)=>s+o.mrc,0); const comm=ord.filter(o=>o.status==="Activated"||o.status==="Closed").reduce((s,o)=>s+o.commission,0); return [a,emp.tl,emp.target,sub,act,emp.target?Math.round(act/emp.target*100):0,comm]; });
+  downloadText("digitalcoo-mis.csv",toCsv([["Agent","TL","Target","Submitted MRC","Activated MRC","Ach %","Commission"],...rows]),"text/csv;charset=utf-8");
+}
+function exportPayroll(){
+  const rows=DB.employees.filter(e=>e.salary>0).map(e=>{ const comm=DB.orders.filter(o=>o.agent===e.name&&(o.status==="Activated"||o.status==="Closed")).reduce((s,o)=>s+o.commission,0); const basic=Math.round(e.salary*0.6), allow=e.salary-basic, grat=Math.round(basic/30*21/12); return [e.id,e.name,e.desig,basic,allow,comm,e.salary+comm,grat]; });
+  downloadText("digitalcoo-payroll.csv",toCsv([["Employee ID","Name","Designation","Basic","Allowances","Commission","Gross Pay","Gratuity Accrual"],...rows]),"text/csv;charset=utf-8");
+}
+function exportWPS(){
+  const rows=DB.employees.filter(e=>e.salary>0).map(e=>[e.id,e.username||defUser(e.name),e.name,e.salary,"AED","Demo WPS SIF row"]);
+  downloadText("digitalcoo-wps-demo.csv",toCsv([["Employee ID","Payroll ID","Name","Fixed Salary","Currency","Note"],...rows]),"text/csv;charset=utf-8");
+}
+function downloadAIReport(){
+  const tmp=document.createElement("div"); tmp.innerHTML=aiReport(AI_PERIOD);
+  downloadText("digitalcoo-ai-report-"+AI_PERIOD+".txt",tmp.innerText||tmp.textContent||"");
+}
+function statusColor(s){
+  if(/Interested|Activated|Closed|100%|Deal Won|Paid/i.test(s)) return "var(--green)";
+  if(/FollowUp|Negotiation|Finalizing|Closing|In-process|Submitted|Outstanding|Pending|Prospect|Value|Waiting|In Pipeline/i.test(s)) return "var(--amber)";
+  if(/Not interested|Lost|Cancelled|Returned|No answer|not in use/i.test(s)) return "var(--brand2)";
+  if(/Hold/i.test(s)) return "var(--purple)";
+  return "var(--blue)";
+}
+const tag=s=>`<span class="tag" style="background:${statusColor(s)}22;color:${statusColor(s)}">${s}</span>`;
+const tgl=(checked,disabled,onchangeAttr)=>`<label class="tgl"><input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} onchange="${onchangeAttr}"><span class="slider"></span></label>`;
+
+/* ---------- Login (per-employee username + password) ---------- */
+function defUser(name){ return String(name).toLowerCase().replace(/[^a-z0-9]/g,""); }
+function renderLogin(){
+  const g=$("roleGrid"); g.className="";
+  g.innerHTML=`
+    <label>Username</label><input id="lg_u" placeholder="your username" autocomplete="username">
+    <label>Password</label><input id="lg_p" type="password" placeholder="password" autocomplete="current-password">
+    <button class="btn-primary" style="width:100%;margin-top:14px" onclick="loginSubmit()">Sign in to my portal</button>
+    <div id="lg_err" style="color:var(--brand2);font-size:12px;margin-top:8px;min-height:16px"></div>
+    <div class="login-demo">
+      <div class="muted" style="font-size:12px;font-weight:700">Demo credentials</div>
+      <div class="cred-grid">
+        <button class="mini-btn" onclick="fillLogin('vani','vani@2026')"><b>Agent</b><br><span class="muted">vani / vani@2026</span></button>
+        <button class="mini-btn" onclick="fillLogin('joy','joy@2026')"><b>Team Leader</b><br><span class="muted">joy / joy@2026</span></button>
+        <button class="mini-btn" onclick="fillLogin('ansari','ansari@2026')"><b>Back Office</b><br><span class="muted">ansari / ansari@2026</span></button>
+        <button class="mini-btn" onclick="fillLogin('admin','admin@2026')"><b>Admin</b><br><span class="muted">admin / admin@2026</span></button>
+      </div>
+    </div>`;
+  setTimeout(()=>{ const u=document.getElementById("lg_u"); if(u){ u.focus(); u.onkeydown=e=>{if(e.key==='Enter')document.getElementById("lg_p").focus();}; document.getElementById("lg_p").onkeydown=e=>{if(e.key==='Enter')loginSubmit();}; } },40);
+}
+function fillLogin(u,p){ $("lg_u").value=u; $("lg_p").value=p; $("lg_p").focus(); }
+function loginSubmit(){
+  const u=(document.getElementById("lg_u").value||"").trim().toLowerCase();
+  const p=document.getElementById("lg_p").value||"";
+  const e=DB.employees.find(x=>(x.username||"").toLowerCase()===u && (x.password||"")===p);
+  if(e){ doLogin(e.role,e.name); }
+  else { document.getElementById("lg_err").textContent="Invalid username or password."; }
+}
+const ROLE_COLOR={agent:"#3b82f6",team_leader:"#22c55e",teams_head:"#8b5cf6",sales_head:"#f59e0b",backoffice:"#06b6d4",accountant:"#14b8a6",hr:"#ec4899",admin:"#94a3b8"};
+function roleColor(r){ return ROLE_COLOR[r]||"var(--brand)"; }
+function doLogin(role,name){
+  SESSION={role,name};
+  $("login").style.display="none";
+  $("app").style.display="grid";
+  document.documentElement.style.setProperty("--role", roleColor(role));
+  $("whoName").textContent=name;
+  const wr=$("whoRole"); wr.textContent=ROLES[role].name; wr.className="rolepill";
+  $("whoAv").textContent=name[0];
+  try{ AGENT_FILTER=localStorage.getItem("digicoo_agent_"+name)||""; }catch(e){ AGENT_FILTER=""; }
+  if(AGENT_FILTER && !baseVisibleAgents().includes(AGENT_FILTER)) AGENT_FILTER="";
+  DATE_FILTER="all"; DATE_FROM=""; DATE_TO=""; // demo opens with populated sample data
+  CURRENT="dash"; loadSeen(); renderNav(); render();
+  toastedIds=new Set((DB.notifications||[]).map(n=>n.id)); renderBell();
+}
+function logout(){ SESSION=null; $("app").style.display="none"; $("login").style.display="flex"; }
+
+let NAV_OPEN={};
+function currentSubOf(mod){
+  if(mod==="hr") return HR_SUB;
+  if(mod==="payroll") return PAY_TAB;
+  if(mod==="accounting") return ACC_TAB;
+  if(mod==="admin") return ADMIN_SUB;
+  return null;
+}
+function renderNav(){
+  const nav=$("nav"); nav.innerHTML="";
+  const list=myAccessList();
+  Object.keys(NAVDEF).filter(k=>list.includes(k)).forEach(k=>{
+    const d=NAVDEF[k];
+    if(d.subs){
+      const open=!!NAV_OPEN[k];
+      const grp=document.createElement("div");
+      grp.className="nav-item"+(k===CURRENT?" current-group":"");
+      grp.innerHTML=`<span class="ic">${d.ic}</span> ${d.t}<span style="margin-left:auto;opacity:.7">${open?'▾':'▸'}</span>`;
+      grp.onclick=()=>toggleNavGroup(k);
+      nav.appendChild(grp);
+      const sub=currentSubOf(k);
+      const subsWrap=document.createElement("div");
+      subsWrap.className=open?"":"hidden";
+      d.subs.forEach(s=>{
+        const el=document.createElement("div");
+        el.className="nav-item nav-sub"+(k===CURRENT&&sub===s.key?" active":"");
+        el.textContent=s.t;
+        el.onclick=()=>goSub(k,s.key);
+        subsWrap.appendChild(el);
+      });
+      nav.appendChild(subsWrap);
+    } else {
+      const el=document.createElement("div");
+      el.className="nav-item"+(k===CURRENT?" active":"");
+      el.innerHTML=`<span class="ic">${d.ic}</span> ${d.t}`;
+      el.onclick=()=>go(k);
+      nav.appendChild(el);
+    }
+  });
+}
+function render(){
+  const d=NAVDEF[CURRENT];
+  const sub=currentSubOf(CURRENT);
+  const subLabel=(sub&&d.subs)?((d.subs.find(s=>s.key===sub)||{}).t):null;
+  const detailTitle=(CURRENT==="hr"&&EMP_PAGE)?"Employee Profile":(CURRENT==="dsr"&&DSR_PAGE)?"DSR Entry":(CURRENT==="pipeline"&&DEAL_PAGE)?"Opportunity":(CURRENT==="backoffice"&&ORDER_PAGE)?"Order":null;
+  $("pageTitle").textContent=detailTitle||(d.t+(subLabel?(" — "+subLabel):""));
+  $("view").innerHTML = ({
+    dash:viewDash, dsr:viewDSR, pipeline:viewPipeline,
+    backoffice:viewBackoffice, mis:viewMIS, hr:viewHR, payroll:viewPayroll,
+    accounting:viewAccounting, ai:viewAI, admin:viewAdmin
+  }[CURRENT])();
+  renderBell();
+  renderAgentFilter();
+  enhanceSelects($("view"));
+}
+// Per-user permission overrides: DB.userAccess[empId]/DB.userEditAccess[empId], when present
+// (even as []), fully replace the role default for that one person. Keyed by employee id — not
+// name — so a rename doesn't orphan the override.
+function sessionEmp(){ return SESSION && DB.employees.find(e=>e.name===SESSION.name); }
+function myAccessList(){ const emp=sessionEmp(); return (emp && DB.userAccess[emp.id]!==undefined) ? DB.userAccess[emp.id] : (DB.access[SESSION.role]||[]); }
+function myEditList(){ const emp=sessionEmp(); return (emp && DB.userEditAccess[emp.id]!==undefined) ? DB.userEditAccess[emp.id] : (DB.editAccess[SESSION.role]||[]); }
+function canView(mod){ return !!SESSION && myAccessList().includes(mod); }
+function canEdit(mod){ return !!SESSION && myEditList().includes(mod); }
+function toggleUserAccess(empId,mod,on){
+  const e=DB.employees.find(x=>x.id===empId); if(!e) return;
+  if(DB.userAccess[empId]===undefined) DB.userAccess[empId]=JSON.parse(JSON.stringify(DB.access[e.role]||[]));
+  const a=DB.userAccess[empId]; const i=a.indexOf(mod);
+  if(on&&i<0)a.push(mod); if(!on&&i>=0)a.splice(i,1);
+  save(); if(sessionEmp()&&sessionEmp().id===empId) renderNav();
+  render();
+}
+function toggleUserEdit(empId,mod,on){
+  const e=DB.employees.find(x=>x.id===empId); if(!e) return;
+  if(DB.userEditAccess[empId]===undefined) DB.userEditAccess[empId]=JSON.parse(JSON.stringify(DB.editAccess[e.role]||[]));
+  const a=DB.userEditAccess[empId]; const i=a.indexOf(mod);
+  if(on&&i<0)a.push(mod); if(!on&&i>=0)a.splice(i,1);
+  save(); render();
+}
+function resetUserOverride(empId){
+  delete DB.userAccess[empId]; delete DB.userEditAccess[empId];
+  save(); if(sessionEmp()&&sessionEmp().id===empId) renderNav();
+  render();
+}
+function go(mod){
+  if(!canView(mod)){ toast("This role does not have access to "+(NAVDEF[mod]?NAVDEF[mod].t:mod)); return; }
+  const d=NAVDEF[mod];
+  if(d.subs){ goSub(mod,currentSubOf(mod)||d.subs[0].key); return; }
+  CURRENT=mod; if(mod==="dsr") DATE_FILTER="all"; renderNav(); render();
+}
+function goSub(mod,subKey){
+  if(!canView(mod)){ toast("This role does not have access to "+(NAVDEF[mod]?NAVDEF[mod].t:mod)); return; }
+  CURRENT=mod;
+  if(mod==="hr"){ HR_SUB=subKey; EMP_PAGE=null; }
+  else if(mod==="payroll"){ PAY_TAB=subKey; }
+  else if(mod==="accounting"){ ACC_TAB=subKey; }
+  else if(mod==="admin"){ ADMIN_SUB=subKey; }
+  NAV_OPEN[mod]=true;
+  renderNav(); render();
+}
+function toggleNavGroup(mod){
+  if(!canView(mod)){ toast("This role does not have access to "+(NAVDEF[mod]?NAVDEF[mod].t:mod)); return; }
+  if(NAV_OPEN[mod]&&CURRENT===mod){ NAV_OPEN[mod]=false; renderNav(); return; }
+  const d=NAVDEF[mod];
+  goSub(mod,currentSubOf(mod)||(d.subs&&d.subs[0].key));
+}
+function goToDeal(id){
+  if(!canView('pipeline')) return;
+  CURRENT='pipeline'; DEAL_PAGE=id; renderNav(); render();
+}
+
+/* ---------- Scope: which agents can current user see ---------- */
+function descendantsOf(name){
+  let res=[]; DB.employees.filter(e=>e.reportsTo===name).forEach(e=>{ res.push(e); res=res.concat(descendantsOf(e.name)); });
+  return res;
+}
+function baseVisibleAgents(){
+  const r=SESSION.role, me=SESSION.name;
+  if(r==="agent") return [me];
+  if(r==="team_leader"||r==="teams_head") return descendantsOf(me).filter(e=>e.role==="agent").map(e=>e.name);
+  // sales_head, admin, backoffice, accountant, hr see all agents
+  return DB.employees.filter(e=>e.role==="agent").map(e=>e.name);
+}
+function visibleAgents(){
+  const base=baseVisibleAgents();
+  if(AGENT_FILTER && base.includes(AGENT_FILTER)) return [AGENT_FILTER];
+  return base;
+}
+// ---- DSR date filter ----
+function dsrDateRange(){
+  const t=new Date(); t.setHours(0,0,0,0); const iso=d=>d.toISOString().slice(0,10);
+  switch(DATE_FILTER){
+    case "all": return {from:"0000-01-01",to:"9999-12-31",label:"All sample data"};
+    case "7d": { const s=new Date(t); s.setDate(s.getDate()-6); return {from:iso(s),to:iso(t),label:"Last 7 days ("+iso(s)+" → "+iso(t)+")"}; }
+    case "mtd": { const s=new Date(t.getFullYear(),t.getMonth(),1); return {from:iso(s),to:iso(t),label:"Month to date"}; }
+    case "ytd": { const s=new Date(t.getFullYear(),0,1); return {from:iso(s),to:iso(t),label:"Year to date"}; }
+    case "custom": return {from:DATE_FROM||"0000-01-01",to:DATE_TO||"9999-12-31",label:"Custom: "+(DATE_FROM||"…")+" → "+(DATE_TO||"…")};
+    default: return {from:iso(t),to:iso(t),label:"Today ("+iso(t)+")"};
+  }
+}
+function setDateFilter(v){ DATE_FILTER=v; if(v==="custom"){ const t=new Date().toISOString().slice(0,10); if(!DATE_FROM)DATE_FROM=t; if(!DATE_TO)DATE_TO=t; } render(); }
+function setCustomDate(which,val){ if(which==="from")DATE_FROM=val; else DATE_TO=val; render(); }
+// ---- Agent drill-down filter (TL/Teams Head/Sales Head can focus one agent) ----
+function setAgentFilter(v){ AGENT_FILTER=v||""; try{ localStorage.setItem("digicoo_agent_"+((SESSION&&SESSION.name)||"x"), AGENT_FILTER); }catch(e){} render(); }
+const AGENT_SCOPED_VIEWS=["dash","dsr","pipeline","backoffice","mis","ai"];
+function renderAgentFilter(){
+  const el=document.getElementById("agentFilter"); if(!el) return;
+  if(!SESSION || !AGENT_SCOPED_VIEWS.includes(CURRENT) || ["agent","backoffice","accountant","hr"].includes(SESSION.role)){ el.innerHTML=""; return; }
+  const base=baseVisibleAgents();
+  if(base.length<=1){ el.innerHTML=""; return; }
+  el.innerHTML=`<select onchange="setAgentFilter(this.value)" style="width:180px">
+      <option value="">All Agents (${base.length})</option>
+      ${base.map(a=>`<option value="${a}" ${AGENT_FILTER===a?'selected':''}>${a}</option>`).join("")}
+    </select>`;
+  enhanceSelects(el);
+}
+/* ---------- Record-level privacy: a record is owned by the TL the agent
+   reported to WHEN it was created (rec.tl). Reassigning an agent does NOT
+   expose past records to the new TL. ---------- */
+function reportsUpTo(name,ancestor){ let cur=DB.employees.find(e=>e.name===name),g=0; while(cur&&cur.reportsTo&&g++<12){ if(cur.reportsTo===ancestor)return true; cur=DB.employees.find(e=>e.name===cur.reportsTo);} return false; }
+function myTLscope(){ const r=SESSION.role; if(r==="team_leader")return [SESSION.name]; if(r==="teams_head")return DB.employees.filter(e=>e.role==="team_leader"&&reportsUpTo(e.name,SESSION.name)).map(e=>e.name); return null; }
+function recVisible(rec){ if(!SESSION)return false; if(AGENT_FILTER && rec.agent!==AGENT_FILTER) return false; if(SESSION.role==="agent")return rec.agent===SESSION.name; const tls=myTLscope(); if(tls===null)return true; return tls.includes(rec.tl); }
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+function viewDash(){
+  const ags=visibleAgents();
+  const dsr=DB.dsr.filter(recVisible);
+  const pipe=DB.pipeline.filter(recVisible);
+  const ord=DB.orders.filter(recVisible);
+  const calls=dsr.length, connected=dsr.filter(d=>d.connected==="YES").length;
+  const connRate=calls?Math.round(connected/calls*100):0;
+  const pipeVal=pipe.reduce((s,p)=>s+p.mrc,0);
+  const subMRC=ord.reduce((s,o)=>s+o.mrc,0);
+  const actMRC=ord.filter(o=>o.status==="Activated"||o.status==="Closed").reduce((s,o)=>s+o.mrc,0);
+  const target=DB.employees.filter(e=>ags.includes(e.name)).reduce((s,e)=>s+e.target,0);
+  const ach=target?Math.round(actMRC/target*100):0;
+
+  let k=`<div class="kpis">
+    ${kpi("Calls Logged",calls,"var(--blue)","Connected "+connRate+"%","dsr")}
+    ${kpi("Pipeline Value (MRC)",AED(pipeVal),"var(--purple)",pipe.length+" open deals","pipeline")}
+    ${kpi("Submitted MRC",AED(subMRC),"var(--amber)",ord.length+" orders","mis")}
+    ${kpi("Activated MRC",AED(actMRC),"var(--green)","Target "+ach+"%","mis")}
+  </div>`;
+
+  // stage funnel
+  const byStage=PIPE_STAGES.map(s=>({s,n:pipe.filter(p=>p.stage===s).length,v:pipe.filter(p=>p.stage===s).reduce((a,p)=>a+p.mrc,0)}));
+  const maxN=Math.max(1,...byStage.map(x=>x.n));
+  let funnel=byStage.map(x=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px"><span>${x.s}</span><span class="muted">${x.n} · ${AED(x.v)}</span></div><div class="bar"><i style="width:${x.n/maxN*100}%;background:${statusColor(x.s)}"></i></div></div>`).join("");
+
+  // agent leaderboard
+  const board=ags.map(a=>{
+    const t=DB.employees.find(e=>e.name===a)?.target||0;
+    const agOrd=ord.filter(o=>o.agent===a);
+    const sub=agOrd.reduce((s,o)=>s+o.mrc,0);
+    const av=agOrd.filter(o=>o.status==="Activated"||o.status==="Closed").reduce((s,o)=>s+o.mrc,0);
+    return {a,t,sub,av,pend:t-av,pct:t?Math.round(av/t*100):0};
+  }).sort((x,y)=>y.av-x.av);
+  let lb=`<table><tr><th>Agent</th><th>Target</th><th>Submission MRC</th><th>Activated</th><th>Pending Target</th><th>Ach %</th></tr>`+
+    board.map(b=>`<tr><td>${b.a}</td><td>${AED(b.t)}</td><td style="color:var(--amber)">${AED(b.sub)}</td><td style="color:var(--green)">${AED(b.av)}</td><td style="color:${b.pend>0?'var(--brand2)':'var(--green)'}">${AED(b.pend)}</td><td>${tag(b.pct+"%")}</td></tr>`).join("")+`</table>`;
+
+  return actionNeeded()+k+`<div class="grid2">
+    <div class="card"><h3>Pipeline by Stage</h3>${funnel}</div>
+    <div class="card"><h3>Agent Performance (Activated MRC)</h3>${lb}</div>
+  </div>
+  <div class="card"><h3>Quick AI Insight <span class="badge">AI</span></h3>${miniInsight(ord)}</div>`;
+}
+function actionNeeded(){
+  const r=SESSION.role, me=SESSION.name; let items=[], title="";
+  if(r==="team_leader"){ items=DB.pipeline.filter(p=>p.approval==="pending_tl"&&p.tl===me); title="deals awaiting your approval"; }
+  else if(r==="agent"){ items=DB.pipeline.filter(p=>p.approval==="rejected"&&p.agent===me); title="rejected — revise & resubmit"; }
+  else if(r==="backoffice"){ items=DB.pipeline.filter(p=>p.approval==="approved"); title="approved deals ready to process"; }
+  if(!items.length) return "";
+  return `<div class="card" style="border-left:4px solid var(--amber)"><h3>🔔 Action Needed <span class="badge">${items.length}</span> <span class="muted" style="font-weight:400;font-size:12px">— ${title}</span></h3>
+    <table><tr><th>DSR No</th><th>Company</th><th>Agent</th><th>MRC</th><th></th></tr>
+    ${items.map(p=>`<tr><td><b style="color:var(--brand2)">${p.dsrNo}</b></td><td>${p.company}</td><td>${p.agent}</td><td>${AED(p.mrc)}</td><td><button class="btn-primary" onclick="goToDeal('${p.id}')">Open</button></td></tr>`).join("")}</table></div>`;
+}
+function kpi(label,val,color,sub,target){
+  const clickable=target&&canView(target);
+  return `<div class="kpi${clickable?' clickable':''}" ${clickable?`onclick="go('${target}')" title="Open ${NAVDEF[target].t}"`:''}><div class="label">${label}</div><div class="val" style="color:${color}">${val}</div><div class="sub muted">${sub}</div></div>`;
+}
+function miniInsight(ord){
+  const onHold=ord.filter(o=>o.status==="On Hold").length;
+  const cancelled=ord.filter(o=>o.status==="Cancelled").length;
+  const inproc=ord.filter(o=>o.status==="E& In-process"||o.status==="Submitted").length;
+  let f="";
+  f+=`<div class="flag good">✓ ${ord.filter(o=>o.status==="Activated"||o.status==="Closed").length} orders activated/closed this period.</div>`;
+  if(inproc) f+=`<div class="flag warn">⚠ ${inproc} orders waiting on e& / back office — chase to protect activation rate.</div>`;
+  if(onHold) f+=`<div class="flag warn">⚠ ${onHold} orders On Hold (usually missing documents). Assign to back office today.</div>`;
+  if(cancelled) f+=`<div class="flag bad">✗ ${cancelled} cancelled/returned — review reasons in MIS to cut churn.</div>`;
+  return f;
+}
+
+/* ============================================================
+   DSR — AGENT  (single tab: build list + call + update status)
+   ============================================================ */
+function viewDSR(){
+  if(DSR_PAGE) return viewDSRDetail(DSR_PAGE);
+  const ags=visibleAgents();
+  const isAgent=SESSION.role==="agent";
+  const dr=dsrDateRange();
+  const rows=DB.dsr.filter(d=>recVisible(d) && d.date && d.date>=dr.from && d.date<=dr.to).sort((a,b)=>dsrSeqNum(b.dsrNo)-dsrSeqNum(a.dsrNo));
+  const today=new Date().toISOString().slice(0,10);
+  // quick stats
+  const total=rows.length, conn=rows.filter(d=>d.connected==="YES").length;
+  const interested=rows.filter(d=>d.status==="Interested").length;
+  const followup=rows.filter(d=>d.status==="FollowUp").length;
+  const canAdd=canEdit('dsr');
+  let body=rows.length?rows.slice(0,500).map(d=>`<tr style="cursor:pointer" onclick="DSR_PAGE='${d.id}';render();">
+    <td><b style="color:var(--brand2)">${d.dsrNo||"-"}</b></td><td>${d.date}</td>${isAgent?'':`<td>${d.agent}</td>`}<td>${d.company}</td><td class="muted">${d.contactNo||"-"}</td>
+    <td>${d.customer||"-"}</td><td>${tag(d.status)}</td>
+    <td>${d.converted?'<span class="tag" style="background:var(--green)22;color:var(--green)">✓ In Pipeline</span>':'<span class="muted">—</span>'}</td>
+    <td>${d.connected==="YES"?'<span style="color:var(--green)">●</span>':'<span class="muted">○</span>'}</td>
+    <td class="muted">${d.remarks||""}</td>
+    <td style="white-space:nowrap">${(()=>{const p=priorContact(d);return p?`<span class="dupwarn" title="Already called by ${p.by} on ${p.date} (${p.no})" onclick="event.stopPropagation();dupInfo('${d.id}')">⚠ Dup</span>`:'';})()}
+      ${chatBtn(d.dsrNo)}
+      <button class="btn-ghost kebab" onclick="rowMenu('${d.id}',event)">⋯</button></td></tr>`).join(""):`<tr><td colspan="${isAgent?10:11}" class="empty">No DSR records in ${dr.label}. Use All sample data or import a calling list.</td></tr>`;
+  return `<div class="kpis">
+      ${kpi("Calls Logged",total,"var(--blue)",conn+" connected")}
+      ${kpi("Interested",interested,"var(--green)","Push to pipeline")}
+      ${kpi("Follow-ups",followup,"var(--amber)","To call back")}
+      ${kpi("Connect Rate",total?Math.round(conn/total*100)+"%":"0%","var(--purple)","Quality signal")}
+    </div>
+    <div class="toolbar">
+      ${canAdd?`<button class="btn-primary" onclick="DSR_PAGE='new';render();">+ Log Call</button>`:''}
+      ${canAdd?'<button class="btn-ghost" onclick="importDSRModal()">⤓ Import list (Google Sheet / CSV)</button>':''}
+      <button class="btn-ghost" onclick="exportDSR()">Export DSR CSV</button>
+      <select onchange="setDateFilter(this.value)" style="width:auto;min-width:150px">
+        <option value="all" ${DATE_FILTER==='all'?'selected':''}>All sample data</option>
+        <option value="today" ${DATE_FILTER==='today'?'selected':''}>Today</option>
+        <option value="7d" ${DATE_FILTER==='7d'?'selected':''}>Last 7 Days</option>
+        <option value="mtd" ${DATE_FILTER==='mtd'?'selected':''}>Month to Date</option>
+        <option value="ytd" ${DATE_FILTER==='ytd'?'selected':''}>Year to Date</option>
+        <option value="custom" ${DATE_FILTER==='custom'?'selected':''}>Custom…</option>
+      </select>
+      ${DATE_FILTER==='custom'?`<input type="date" value="${DATE_FROM}" onchange="setCustomDate('from',this.value)" style="width:auto"><span class="muted">to</span><input type="date" value="${DATE_TO}" onchange="setCustomDate('to',this.value)" style="width:auto">`:''}
+      <span class="muted">${dr.label} · ${total} calls</span>
+    </div>
+    ${(()=>{const cols=isAgent?["DSR No","Date","Company","Contact","Customer","Status","Pipeline","Conn.","Remarks",null]:["DSR No","Date","Agent","Company","Contact","Customer","Status","Pipeline","Conn.","Remarks",null];
+      return `<div class="scroll"><table id="dTbl"><tr>${cols.map(c=>`<th>${c||''}</th>`).join("")}</tr>${colFilterRow(cols)}${body}</table></div>`;})()}
+    ${total===0?'<p class="muted" style="padding:14px">No calls in this date range. Pick <b>Year to Date</b> or <b>Custom</b> to see historical / imported data.</p>':''}`;
+}
+// Full-page DSR entry/update — replaces the old "+ Log Call" and row "Update" popups.
+// id==="new" creates a fresh call log; any other id views/edits that existing record.
+function viewDSRDetail(id){
+  const isNew=id==="new";
+  const d=isNew?{}:DB.dsr.find(x=>x.id===id);
+  if(!isNew&&!d){ DSR_PAGE=null; return viewDSR(); }
+  const editable=canEdit('dsr');
+  if(isNew&&!editable){ DSR_PAGE=null; return viewDSR(); }
+  const backBtn=`<button class="btn-ghost" onclick="DSR_PAGE=null;render();">← Back to DSR</button>`;
+  const ro=(label,val)=>`<div><label>${label}</label><div style="padding:8px 0">${val||'<span class="muted">—</span>'}</div></div>`;
+  const fld=(label,fid,val)=>editable?`<div><label>${label}</label><input id="${fid}" value="${val||''}"></div>`:ro(label,val);
+  const sel=(label,fid,options,cur)=>editable
+    ?`<div><label>${label}</label><select id="${fid}">${options.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join("")}</select></div>`
+    :ro(label,cur);
+  const prodFld=editable
+    ?`<div><label>Product of Interest</label><select id="d_pr"><option value="">— none / not sure yet —</option>${DB.products.map(p=>`<option value="${p.title}" ${p.title===(d.product||'')?'selected':''}>${p.cat} - ${p.title}</option>`).join("")}</select></div>`
+    :ro("Product of Interest",d.product);
+  return `${backBtn}
+  <div class="profile-grid" style="margin-top:14px">
+    <div>
+      <div class="card"><h3>${isNew?'New DSR Call':'DSR — '+d.company}</h3>
+        ${!isNew?ro("DSR No.",d.dsrNo):''}
+        <div class="row">${fld("Company",'d_co',d.company)}${fld("Contact No.",'d_cn',d.contactNo)}</div>
+        <div class="row">${fld("Customer / Contact Person",'d_cu',d.customer)}</div>
+        <div class="row">${prodFld}</div>
+        <div class="row">${sel("Call Status",'d_st',CALL_STATUS,d.status||CALL_STATUS[0])}${sel("Connected?",'d_cnf',["YES","NO"],d.connected||"YES")}</div>
+        <div class="row">${fld("Remarks",'d_re',d.remarks)}</div>
+      </div>
+      ${editable?`<button class="btn-primary" onclick="saveDSR('${id}')">💾 ${isNew?'Log Call':'Save Changes'}</button> ${backBtn}`:''}
+    </div>
+    <div>
+      <div class="card"><h3>Info</h3>
+        ${!isNew?`<p class="muted" style="font-size:12px;margin-top:0">Agent: <b>${d.agent}</b> · TL: ${d.tl}</p>${d.converted?'<div class="flag good">Already converted to Pipeline</div>':''}<button class="btn-ghost" onclick="openHistory('${d.id}')">History</button>`:'<p class="muted" style="font-size:12px;margin-top:0">A permanent DSR number is assigned once saved.</p>'}
+      </div>
+    </div>
+  </div>`;
+}
+function saveDSR(id){
+  if(!canEdit('dsr')) return;
+  const isNew=id==="new";
+  const co=$("d_co").value.trim(), phone=$("d_cn").value.trim();
+  if(!co||!phone){ alert("Company and contact number are required for a credible DSR entry."); return; }
+  const status=$("d_st").value, connected=$("d_cnf").value, product=$("d_pr")?$("d_pr").value:"", customer=$("d_cu").value.trim(), remarks=$("d_re").value.trim();
+  if(isNew){
+    const _ag=SESSION.role==="agent"?SESSION.name:"Hira";
+    const entry={id:"D"+Date.now(),dsrNo:nextDsrNo(),date:new Date().toISOString().slice(0,10),agent:_ag,tl:(DB.employees.find(x=>x.name===_ag)||{}).tl||"-",company:co,contactNo:phone,customer,product,status,remarks,connected};
+    addLog(entry,"DSR created · status set to "+status);
+    DB.dsr.unshift(entry);
+    notify(mgmtChain(entry.agent).slice(0,2), `New DSR ${entry.dsrNo} by ${entry.agent}: ${entry.company||'—'} (${status})`, {dsrNo:entry.dsrNo});
+    save();
+    const dup=priorContact(entry);
+    if(dup){ addLog(entry,`⚠ Duplicate — earlier contact ${dup.no} by ${dup.by} on ${dup.date} (matched ${dup.matchType})`); notify([dup.by,...mgmtChain(entry.agent).slice(0,1)], `⚠ Possible duplicate ${entry.dsrNo} — ${entry.company} also contacted by ${dup.by}`, {dsrNo:entry.dsrNo}); save(); }
+    DSR_PAGE=null; render();
+    if(dup){ alert(`⚠ Duplicate contact!\n\nThis ${dup.matchType==='number'?'number':'company'} was already called by ${dup.by} on ${dup.date} (${dup.no}).\n\nCoordinate before re-contacting.`); }
+    if(status==="Interested" && confirm("Marked Interested — convert this lead to a pipeline opportunity now?")){ convertToPipeline(entry.id); }
+  } else {
+    const d=DB.dsr.find(x=>x.id===id); if(!d) return;
+    const nv={company:co,customer,contactNo:phone,product,status,connected,remarks};
+    if(nv.status!==d.status) addLog(d,`Status: ${d.status} → ${nv.status}`);
+    if(nv.connected!==d.connected) addLog(d,`Connected: ${d.connected} → ${nv.connected}`);
+    if(nv.customer!==(d.customer||"")) addLog(d,`Customer: "${d.customer||''}" → "${nv.customer}"`);
+    if(nv.product!==(d.product||"")) addLog(d,`Product of interest: ${nv.product||'—'}`);
+    if(nv.contactNo!==(d.contactNo||"")) addLog(d,`Contact No updated`);
+    if(nv.company!==(d.company||"")) addLog(d,`Company updated`);
+    if(nv.remarks!==(d.remarks||"")) addLog(d,`Remarks updated`);
+    Object.assign(d,nv);
+    save(); toast("DSR entry saved."); render();
+    if(d.status==="Interested" && !d.converted && confirm("Marked Interested — convert this lead to a pipeline opportunity now?")){ convertToPipeline(d.id); }
+  }
+}
+// ---- Duplicate contact detection ----
+const _phone=s=>String(s||"").replace(/\D/g,"");
+const _norm=s=>String(s||"").toLowerCase().replace(/\s+/g,' ').trim();
+function priorContact(rec){
+  const matches=DB.dsr.filter(d=>d.id!==rec.id && (
+    (_phone(rec.contactNo)&&_phone(d.contactNo)===_phone(rec.contactNo)) ||
+    (_norm(rec.company)&&_norm(d.company)===_norm(rec.company))
+  ));
+  const earlier=matches.filter(d=> d.date<rec.date || (d.date===rec.date && dsrSeqNum(d.dsrNo)<dsrSeqNum(rec.dsrNo)));
+  if(!earlier.length) return null;
+  earlier.sort((a,b)=> a.date<b.date?1:-1);
+  const p=earlier[0];
+  return {by:p.agent,date:p.date,no:p.dsrNo,company:p.company,count:earlier.length,
+          matchType:(_phone(rec.contactNo)&&_phone(p.contactNo)===_phone(rec.contactNo))?"number":"company"};
+}
+function dupInfo(id){
+  const d=DB.dsr.find(x=>x.id===id); const p=priorContact(d);
+  if(!p){ openModalInfo("No earlier contact","<p class='muted'>No earlier record found for this contact.</p>"); return; }
+  openModalInfo(`⚠ Possible duplicate — ${d.company}`,
+   `<div class="flag bad" style="margin-top:0">This contact was already called earlier by another agent.</div>
+    <table>
+     <tr><td class="muted">Matched on</td><td><b>${p.matchType==='number'?'Contact number':'Company name'}</b></td></tr>
+     <tr><td class="muted">Earlier DSR No</td><td><b style="color:var(--brand2)">${p.no}</b></td></tr>
+     <tr><td class="muted">Called by</td><td><b>${p.by}</b></td></tr>
+     <tr><td class="muted">Date</td><td>${p.date}</td></tr>
+     <tr><td class="muted">Earlier records</td><td>${p.count}</td></tr>
+    </table>
+    <p class="muted" style="font-size:12px">Check with <b>${p.by}</b> before re-contacting, to avoid double-calling the same customer.</p>`);
+}
+// ---- Row action dropdown ----
+function rowMenu(id,ev){
+  ev.stopPropagation();
+  const d=DB.dsr.find(x=>x.id===id); if(!d)return;
+  const items=[];
+  if(canEdit('dsr')){
+    items.push(d.converted
+      ? `<div class="mi disabled">✓ Already in Pipeline</div>`
+      : `<button class="mi" onclick="closeMenu();convertToPipeline('${id}')">→ Convert to Pipeline</button>`);
+  }
+  items.push(`<button class="mi" onclick="closeMenu();openHistory('${id}')">History (${(d.history||[]).length})</button>`);
+  if(priorContact(d)) items.push(`<button class="mi" onclick="closeMenu();dupInfo('${id}')">⚠ View earlier contact</button>`);
+  const x=Math.min(ev.clientX, window.innerWidth-210), y=Math.min(ev.clientY, window.innerHeight-160);
+  $("menuHost").innerHTML=`<div class="menubackdrop" onclick="closeMenu()"></div><div class="menucard" style="left:${x}px;top:${y}px">${items.join("")}</div>`;
+}
+function closeMenu(){ $("menuHost").innerHTML=""; }
+function openHistory(id){
+  const d=DB.dsr.find(x=>x.id===id); if(!d)return;
+  const h=(d.history||[]).slice().reverse();
+  const stageColor={DSR:"var(--blue)",Pipeline:"var(--purple)","Back Office":"var(--green)"};
+  const rows=h.length?h.map(x=>{const c=stageColor[x.stage]||"var(--blue)";return `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)">
+      <div style="min-width:130px" class="muted">${x.ts}</div>
+      <div style="flex:1"><span class="tag" style="background:${c}22;color:${c}">${x.stage||'DSR'}</span> ${x.text}<div><small class="muted">by ${x.user}</small></div></div>
+    </div>`}).join(""):'<p class="muted">No history yet.</p>';
+  openModalInfo(`History — ${d.dsrNo} · ${d.company}`,
+    `<p class="muted" style="margin-top:0;font-size:12px">Immutable audit trail — who changed what, when. Newest first. The DSR number stays fixed for the life of the record.</p>${rows}`);
+}
+function openHistoryByNo(no){
+  const d=DB.dsr.find(x=>x.dsrNo===no);
+  if(d) openHistory(d.id);
+  else openModalInfo(`History — ${no}`,'<p class="muted">This is a seeded/legacy record with no linked DSR call. Records created via the DSR — Agent tab carry a full audit trail end-to-end.</p>');
+}
+function importDSRModal(){
+  if(!canEdit('dsr')){ alert("This role cannot log or import DSR calls."); return; }
+  openModal("Import Calling List",`
+    <p class="muted" style="margin-top:0;font-size:12px">Paste rows from your rough Google Sheet / Excel. One per line:<br><b>Company, Contact No, Customer, Status, Remarks</b></p>
+    <textarea id="imp" rows="7" placeholder="ABC Trading LLC, 97150xxxxxxx, Mr Ali, FollowUp, Call back Sunday
+XYZ Contracting, 97152xxxxxxx, Neha, Not interested, Using Du"></textarea>
+    <div class="flag warn" style="margin-top:10px">In the live system this is a one-click <b>Google Sheets connector</b> — no copy-paste. Demo accepts pasted rows.</div>
+  `,()=>{
+    const lines=$("imp").value.split("\n").map(l=>l.trim()).filter(Boolean); let n=0;
+    if(!lines.length){ alert("Paste at least one row to import."); return false; }
+    lines.forEach(line=>{
+      const p=line.split(",").map(s=>s.trim()); if(!p[0])return;
+      const st=CALL_STATUS.includes(p[3])?p[3]:"FollowUp";
+      const _ag=SESSION.role==="agent"?SESSION.name:"Hira";
+      const e={id:"D"+Date.now()+(n++),dsrNo:nextDsrNo(),date:new Date().toISOString().slice(0,10),agent:_ag,tl:(DB.employees.find(x=>x.name===_ag)||{}).tl||"-",company:p[0],contactNo:p[1]||"",customer:p[2]||"",status:st,remarks:p[4]||"",connected:(st==="No answer"||st==="Voicemail")?"NO":"YES"};
+      addLog(e,"Imported from sheet · status "+st); DB.dsr.unshift(e);
+    });
+    if(!n){ alert("No valid rows were imported. Use: Company, Contact No, Customer, Status, Remarks"); return false; } save(); alert(n+" contacts imported into your DSR."); render();
+  });
+}
+
+/* ============================================================
+   PIPELINE (kanban)
+   ============================================================ */
+function viewPipeline(){
+  if(DEAL_PAGE) return viewDealDetail(DEAL_PAGE);
+  const pipe=[...DB.pipeline.filter(recVisible)].sort((a,b)=>dsrSeqNum(b.dsrNo)-dsrSeqNum(a.dsrNo));
+  const pct=s=>{const m=String(s).match(/(\d+)%/);return m?+m[1]:0;};
+  const open=pipe.filter(p=>!p.stage.includes("100%")&&!p.stage.includes("Lost"));
+  const openMRC=open.reduce((a,p)=>a+p.mrc,0);
+  const weighted=pipe.reduce((a,p)=>a+p.mrc*pct(p.stage)/100,0);
+  const wonItems=pipe.filter(p=>p.stage.includes("100%"));
+  const won=wonItems.reduce((a,p)=>a+p.mrc,0);
+  const cols=["DSR No","Date","Company","Customer","Product","Qty","MRC/mo","Annual","Stage","Approval","Currently With","Agent","TL",null];
+  const needsMe=p=>(SESSION.role==="team_leader"&&p.approval==="pending_tl"&&p.tl===SESSION.name)||(SESSION.role==="agent"&&p.approval==="rejected"&&p.agent===SESSION.name)||(SESSION.role==="backoffice"&&p.approval==="approved");
+  let body=pipe.map(p=>`<tr style="cursor:pointer${needsMe(p)?';background:rgba(246,183,60,.10)':''}" onclick="DEAL_PAGE='${p.id}';render();">
+    <td><b style="color:var(--brand2)">${p.dsrNo||"-"}</b></td><td>${p.date}</td><td>${p.company}</td><td>${p.customer||"-"}</td>
+    <td>${p.product}<br><small class="muted">${p.cat}</small></td><td>${p.qty}</td><td>${AED(p.mrc)}</td><td class="muted">${AED(p.annual)}</td>
+    <td>${tag(p.stage)}</td><td>${needsMe(p)?'🔔 ':''}${approvalBadge(p)}</td><td>${holderChip(p)}</td><td>${p.agent}${p.escalated?' <span title="Escalated to Sales Head" style="color:var(--brand2)">⚑</span>':''}</td><td class="muted">${p.tl}</td>
+    <td style="white-space:nowrap">${chatBtn(p.dsrNo)}<button class="btn-ghost kebab" onclick="rowMenuPipe('${p.id}',event)">⋯</button></td></tr>`).join("");
+  return `<div class="kpis">
+      ${kpi("Open Deals",open.length,"var(--blue)",AED(openMRC)+" MRC")}
+      ${kpi("Weighted Pipeline",AED(weighted),"var(--purple)","Stage-adjusted forecast")}
+      ${kpi("Won (100%)",AED(won),"var(--green)",wonItems.length+" deals")}
+      ${kpi("Total Deals",pipe.length,"var(--amber)","All stages")}
+    </div>
+    <div class="toolbar">
+      <span class="muted">Deals enter only from DSR — Agent (mark a call "Interested" → Convert to Pipeline). Click a row to open it.</span>
+    </div>
+    <div class="scroll"><table id="pTbl"><tr>${cols.map(c=>`<th>${c||''}</th>`).join("")}</tr>${colFilterRow(cols,{Product:[...new Set([...DB.products.map(p=>p.title),...pipe.map(p=>p.product).filter(Boolean)])].sort(),Stage:PIPE_STAGES})}${body}</table></div>`;
+}
+function rowMenuPipe(id,ev){
+  ev.stopPropagation();
+  const p=DB.pipeline.find(x=>x.id===id); if(!p)return;
+  const items=[`<button class="mi" onclick="closeMenu();openHistoryByNo('${p.dsrNo}')">History</button>`];
+  if(canEdit('pipeline')&&!p.stage.includes("100%")&&!p.stage.includes("Lost")) items.push(`<button class="mi" onclick="closeMenu();escalateDeal('${p.id}')">⚑ Escalate to Sales Head</button>`);
+  const x=Math.min(ev.clientX,window.innerWidth-210), y=Math.min(ev.clientY,window.innerHeight-160);
+  $("menuHost").innerHTML=`<div class="menubackdrop" onclick="closeMenu()"></div><div class="menucard" style="left:${x}px;top:${y}px">${items.join("")}</div>`;
+}
+// Full-page opportunity view/edit — replaces the old row "Update" popup.
+function viewDealDetail(id){
+  const p=DB.pipeline.find(x=>x.id===id);
+  if(!p){ DEAL_PAGE=null; return viewPipeline(); }
+  const editable=canEdit('pipeline');
+  const backBtn=`<button class="btn-ghost" onclick="DEAL_PAGE=null;render();">← Back to Pipeline</button>`;
+  const ro=(label,val)=>`<div><label>${label}</label><div style="padding:8px 0">${val||'<span class="muted">—</span>'}</div></div>`;
+  const fld=(label,fid,val,type)=>editable?`<div><label>${label}</label><input id="${fid}" ${type?`type="${type}"`:''} value="${val||''}"></div>`:ro(label,val);
+  const sel=(label,fid,options,cur)=>editable
+    ?`<div><label>${label}</label><select id="${fid}">${options.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join("")}</select></div>`
+    :ro(label,cur);
+  const prodFld=editable
+    ?`<div><label>Product</label><select id="d_pr">${DB.products.map(pr=>`<option data-cat="${pr.cat}" ${pr.title===p.product?'selected':''}>${pr.title}</option>`).join("")}</select></div>`
+    :ro("Product",p.product);
+  const appLine=p.approval?`<div class="flag ${p.approval==='approved'?'good':p.approval==='rejected'?'bad':'warn'}" style="margin-top:12px">Approval status: <b>${APPROVAL_LABEL[p.approval]||p.approval}</b>${p.approvalBy?` · by ${p.approvalBy}`:''}</div>`:"";
+  let actions=`<button class="btn-ghost" onclick="openHistoryByNo('${p.dsrNo}')">History</button>`;
+  if(editable){
+    if(SESSION.role==="agent" && p.agent===SESSION.name && p.approval!=="pending_tl")
+      actions+=` <button class="btn-ghost" style="color:var(--amber)" onclick="escalateToTL('${p.id}')">▲ Escalate to Team Leader</button>`;
+    if(SESSION.role==="team_leader" && p.approval==="pending_tl")
+      actions+=` <button class="btn-ghost" style="color:var(--green)" onclick="approveDeal('${p.id}')">✓ Approve → Back Office</button> <button class="btn-ghost" style="color:var(--brand2)" onclick="rejectDeal('${p.id}')">✗ Reject → Agent</button>`;
+    actions+=` <button class="btn-ghost" onclick="escalateDeal('${p.id}')">⚑ Escalate to Sales Head</button>`;
+  }
+  return `${backBtn}
+  <div class="flag warn" style="margin-top:12px">Ref <b>${p.dsrNo||'-'}</b> · same number flows to Back Office when won (never changes)</div>
+  ${appLine}
+  <div class="profile-grid" style="margin-top:14px">
+    <div>
+      <div class="card"><h3>Opportunity — ${p.company}</h3>
+        <div class="row">${fld("Customer",'d_cu',p.customer)}${ro("Agent",p.agent)}</div>
+        <div class="row">${prodFld}${ro("Category",p.cat)}</div>
+        <div class="row">${fld("Qty",'d_qt',p.qty,'number')}${fld("Unit MRC",'d_pc',p.price,'number')}</div>
+        <div class="row">${sel("Stage",'d_st',PIPE_STAGES,p.stage)}</div>
+        <div class="row">${fld("Remarks",'d_re',p.remarks)}</div>
+      </div>
+      ${editable?`<button class="btn-primary" onclick="saveDeal('${p.id}')">💾 Save Changes</button> ${backBtn}`:''}
+    </div>
+    <div>
+      <div class="card"><h3>Actions</h3>${actions}</div>
+    </div>
+  </div>`;
+}
+function saveDeal(id){
+  if(!canEdit('pipeline')) return;
+  const p=DB.pipeline.find(x=>x.id===id); if(!p) return;
+  const oldStage=p.stage, oldProd=p.product, oldQty=p.qty, oldPrice=p.price, oldCust=p.customer||"", oldRem=p.remarks||"";
+  const qty=+$("d_qt").value, price=+$("d_pc").value;
+  if(qty<1||price<=0){ alert("Quantity and Unit MRC must be positive before saving the opportunity."); return; }
+  p.customer=$("d_cu").value.trim();
+  const prSel=$("d_pr"); if(prSel){ p.product=prSel.value; p.cat=prSel.selectedOptions[0].dataset.cat||p.cat; }
+  p.qty=qty;p.price=price;
+  p.mrc=p.qty*p.price;p.annual=p.mrc*12;p.stage=$("d_st").value;p.remarks=$("d_re").value;
+  if(p.stage!==oldStage) logByDsrNo(p.dsrNo,`Pipeline stage: ${oldStage} → ${p.stage}`,"Pipeline");
+  const ch=[];
+  if(p.product!==oldProd) ch.push(`product → ${p.product}`);
+  if(p.qty!==oldQty) ch.push(`qty → ${p.qty}`);
+  if(p.price!==oldPrice) ch.push(`unit MRC → ${AED(p.price)}`);
+  if((p.customer||"")!==oldCust) ch.push("customer updated");
+  if((p.remarks||"")!==oldRem) ch.push("remarks updated");
+  if(ch.length) logByDsrNo(p.dsrNo,`Pipeline updated · ${ch.join(", ")}`,"Pipeline");
+  if(p.stage.includes("100%") && confirm("Deal won! Send to Back Office for processing?")){
+    let o=DB.orders.find(x=>x.dsrNo===p.dsrNo);
+    if(o){ o.status="Submitted"; o.qty=p.qty; o.mrc=p.mrc; o.product=p.product; o.cat=p.cat; o.commission=Math.round(p.mrc*0.15); o.remarks="Deal won — ready to process"; }
+    else { DB.orders.unshift({id:"O"+Date.now(),dsrNo:p.dsrNo,subDate:new Date().toISOString().slice(0,10),contact:p.customer,contactNo:p.contactNo||"",customer:p.company,pid:"",ord:"",sr:"NEW",cat:p.cat,product:p.product,contract:"12 Months",qty:p.qty,mrc:p.mrc,agent:p.agent,tl:p.tl,eAcctMgr:"Ankit",status:"Submitted",actDate:"",commission:Math.round(p.mrc*0.15),remarks:"From pipeline"}); }
+    logByDsrNo(p.dsrNo,`Deal WON → Back Office processing (Submitted)`,"Back Office");
+    notify([...backOfficeNames(), p.agent], `🎉 Deal WON ${p.dsrNo} by ${p.agent} — ready to process in Back Office (${AED(p.mrc)}/mo)`, {dsrNo:p.dsrNo});
+  }
+  save(); toast("Opportunity saved."); render();
+}
+const APPROVAL_LABEL={pending_tl:"⏳ Pending Team Leader",approved:"✓ Approved → Back Office",rejected:"✗ Rejected — back to agent"};
+function approvalBadge(p){ const a=p&&p.approval; if(!a)return '<span class="muted">—</span>'; const c=a==="approved"?"var(--green)":a==="rejected"?"var(--brand2)":"var(--amber)"; return `<span class="tag" style="background:${c}22;color:${c}">${APPROVAL_LABEL[a]||a}</span>`; }
+// Which person currently holds the task (show their name)
+function currentHolder(p){
+  const bo=backOfficeNames()[0]||"Back Office";
+  if(p.stage&&p.stage.includes("100%")) return {who:bo,role:"backoffice"};
+  if(p.approval==="approved") return {who:bo,role:"backoffice"};
+  if(p.approval==="pending_tl") return {who:p.tl||"—",role:"team_leader"};
+  if(p.approval==="rejected") return {who:p.agent,role:"agent"};
+  if(p.escalated) return {who:salesHeadName()||"Sales Head",role:"sales_head"};
+  return {who:p.agent,role:"agent"};
+}
+function holderChip(p){
+  const h=currentHolder(p); const c=h.role?(ROLE_COLOR[h.role]||"#93a1bd"):"#93a1bd";
+  return `<span class="tag" style="background:${c}22;color:${c}">${h.who}</span>`;
+}
+function escalateToTL(id){
+  const p=DB.pipeline.find(x=>x.id===id); if(!p)return;
+  p.approval="pending_tl"; p.approvalBy=SESSION.name;
+  logByDsrNo(p.dsrNo,`Escalated to Team Leader (${p.tl}) for approval by ${SESSION.name}`,"Pipeline");
+  notify([p.tl], `📋 Deal ${p.dsrNo} (${p.company}) needs your approval — from ${p.agent}`, {dsrNo:p.dsrNo});
+  alert(`Sent to Team Leader ${p.tl} for approval.`); save(); closeModal(); render();
+}
+function approveDeal(id){
+  const p=DB.pipeline.find(x=>x.id===id); if(!p)return;
+  p.approval="approved"; p.approvalBy=SESSION.name;
+  let o=DB.orders.find(x=>x.dsrNo===p.dsrNo);
+  if(o){ if(o.status==="In Pipeline") o.status="Submitted"; o.remarks=(o.remarks?o.remarks+" · ":"")+"TL approved"; }
+  logByDsrNo(p.dsrNo,`Approved by Team Leader (${SESSION.name}) → sent to Back Office`,"Back Office");
+  notify([...backOfficeNames(), p.agent], `✅ Deal ${p.dsrNo} (${p.company}) approved by ${SESSION.name} — ready in Back Office`, {dsrNo:p.dsrNo});
+  alert("Approved and sent to Back Office."); save(); closeModal(); render();
+}
+function rejectDeal(id){
+  const p=DB.pipeline.find(x=>x.id===id); if(!p)return;
+  p.approval="rejected"; p.approvalBy=SESSION.name;
+  logByDsrNo(p.dsrNo,`Rejected by Team Leader (${SESSION.name}) — returned to agent ${p.agent}`,"Pipeline");
+  notify([p.agent], `↩ Deal ${p.dsrNo} (${p.company}) rejected by ${SESSION.name} — please revise & resubmit`, {dsrNo:p.dsrNo});
+  alert("Rejected and returned to the agent."); save(); closeModal(); render();
+}
+function escalateDeal(id){ const p=DB.pipeline.find(x=>x.id===id); p.escalated=true; logByDsrNo(p.dsrNo,"Escalated to Sales Head (Amir Qadri)","Pipeline"); notify([salesHeadName(),...mgmtChain(p.agent).slice(0,2)], `⚑ Deal ${p.dsrNo} (${p.company}) escalated by ${SESSION.name}`, {dsrNo:p.dsrNo}); alert("Escalated to Sales Head (Amir Qadri) for support."); save(); closeModal(); render(); }
+function convertToPipeline(id){
+  if(!canEdit('dsr')) return;
+  const d=DB.dsr.find(x=>x.id===id);
+  addDealModal({company:d.company,customer:d.customer,contactNo:d.contactNo,remarks:d.remarks,dsrNo:d.dsrNo,product:d.product},id);
+}
+function addDealModal(prefill={},dsrId=null){
+  const title=dsrId?"Convert DSR Lead → Pipeline":"New Opportunity";
+  openModal(title,`
+    ${dsrId?'<div class="flag good" style="margin-top:0">Converting <b>'+(prefill.dsrNo||'')+'</b> — '+(prefill.company||'')+' — into a sales opportunity. The DSR number stays the same end-to-end.</div>':''}
+    <div class="row"><div><label>Company</label><input id="n_co" value="${prefill.company||''}"></div><div><label>Contact No.</label><input id="n_cn0" value="${prefill.contactNo||''}"></div></div>
+    <label>Customer / Contact</label><input id="n_cu" value="${prefill.customer||''}">
+    <label>Product</label><select id="n_pr" onchange="prodPick('n')">${DB.products.map(p=>`<option data-cat="${p.cat}" data-mrc="${p.mrc}" ${p.title===prefill.product?'selected':''}>${p.title}</option>`).join("")}</select>
+    <div class="row"><div><label>Category</label><input id="n_cat" disabled></div><div><label>Qty</label><input id="n_qt" type="number" value="1"></div><div><label>Unit MRC (AED)</label><input id="n_pc" type="number"></div></div>
+    <label>Stage</label><select id="n_st">${PIPE_STAGES.map(s=>`<option ${s.includes('10%')?'selected':''}>${s}</option>`).join("")}</select>
+    <label>Remarks</label><textarea id="n_re" rows="2">${prefill.remarks||''}</textarea>
+  `,()=>{
+    const sel=$("n_pr").selectedOptions[0]; const qty=+$("n_qt").value,price=+$("n_pc").value;
+    const co=$("n_co").value.trim();
+    if(!co||qty<1||price<=0){ alert("Company, quantity, and a positive Unit MRC are required before creating a pipeline opportunity."); return false; }
+    const me=DB.employees.find(e=>e.name===SESSION.name)||{};
+    const agent=me.role==="agent"?SESSION.name:(prefill.agent||"Hira");
+    const myTL=(DB.employees.find(e=>e.name===agent)||{}).tl||"-";
+    const recNo=prefill.dsrNo||nextDsrNo();
+    DB.pipeline.unshift({id:"P"+Date.now(),dsrNo:recNo,date:new Date().toISOString().slice(0,10),cp:"DIGI COO",customer:$("n_cu").value.trim(),contactNo:$("n_cn0").value.trim(),company:co,cat:sel.dataset.cat,product:sel.value,price,qty,mrc:qty*price,annual:qty*price*12,stage:$("n_st").value,agent,tl:myTL,escalated:false,remarks:$("n_re").value,fromDSR:!!dsrId});
+    if(dsrId){ const d=DB.dsr.find(x=>x.id===dsrId); if(d){ d.converted=true; d.status="Interested"; addLog(d,`Converted to Pipeline · ${sel.value} ${qty}× = ${AED(qty*price)}/mo · stage ${$("n_st").value}`,"Pipeline"); } }
+    notify(mgmtChain(agent), `Lead ${recNo} converted to Pipeline by ${agent} — ${sel.value}, ${AED(qty*price)}/mo`, {dsrNo:recNo});
+    // Link to Back Office immediately so processing can begin (status: In Pipeline)
+    if(!DB.orders.some(o=>o.dsrNo===recNo)){
+      DB.orders.unshift({id:"O"+Date.now()+Math.floor(Math.random()*1000),dsrNo:recNo,subDate:new Date().toISOString().slice(0,10),contact:$("n_cu").value,contactNo:$("n_cn0").value,customer:$("n_co").value,pid:"",ord:"",sr:"NEW",cat:sel.dataset.cat,product:sel.value,contract:"12 Months",qty,mrc:qty*price,agent,tl:myTL,eAcctMgr:"Ankit",status:"In Pipeline",actDate:"",commission:Math.round(qty*price*0.15),remarks:"Linked from pipeline"});
+      logByDsrNo(recNo,`Linked to Back Office (status: In Pipeline)`,"Back Office");
+      notify(backOfficeNames(), `New pipeline case ${recNo} (${co||'—'}) linked to Back Office — by ${agent}`, {dsrNo:recNo});
+    }
+    save(); CURRENT="pipeline"; renderNav(); render();
+  });
+  setTimeout(()=>prodPick('n'),30); // fill category + default MRC for first product
+}
+function prodPick(px){
+  const sel=document.getElementById(px+"_pr").selectedOptions[0]; if(!sel)return;
+  const c=document.getElementById(px+"_cat"); if(c) c.value=sel.dataset.cat||"";
+  const m=document.getElementById(px+"_pc"); if(m) m.value=sel.dataset.mrc||m.value;
+}
+
+/* ============================================================
+   BACK OFFICE / ORDERS
+   ============================================================ */
+function viewBackoffice(){
+  if(ORDER_PAGE) return viewOrderDetail(ORDER_PAGE);
+  const rows=[...DB.orders].sort((a,b)=>dsrSeqNum(b.dsrNo)-dsrSeqNum(a.dsrNo));
+  let body=rows.map(o=>`<tr style="cursor:pointer" onclick="ORDER_PAGE='${o.id}';render();">
+    <td><b style="color:var(--brand2)">${o.dsrNo||"-"}</b></td><td>${o.subDate}</td><td>${o.customer}</td><td>${o.product}</td><td>${o.qty}</td>
+    <td>${AED(o.mrc)}</td><td>${o.agent}</td><td>${o.pid||'<span class="muted">—</span>'}</td>
+    <td>${o.eOrderNo?`<b style="color:var(--amber)">${o.eOrderNo}</b>`:'<span class="muted">—</span>'}</td>
+    <td>${tag(o.status)}</td><td>${o.actDate||'<span class="muted">—</span>'}</td>
+    <td style="white-space:nowrap">${chatBtn(o.dsrNo)}</td></tr>`).join("");
+  const counts=ORDER_STATUS.map(s=>`${s}: ${rows.filter(o=>o.status===s).length}`).join(" · ");
+  const cols=["DSR No","Sub Date","Customer","Product","Qty","MRC","Agent","PID","e& Order No","Status","Activated",null];
+  return `<div class="toolbar"><button class="btn-ghost" onclick="exportBackoffice()">Export Orders CSV</button><span class="muted">${rows.length} orders · click a row to open it</span></div>
+    <p class="muted" style="font-size:12px;margin:0 0 10px">${counts}</p>
+    <div class="scroll"><table id="oTbl"><tr>${cols.map(c=>`<th>${c||''}</th>`).join("")}</tr>${colFilterRow(cols)}${body}</table></div>`;
+}
+// Full-page order processing — replaces the old "Process" popup.
+function viewOrderDetail(id){
+  const o=DB.orders.find(x=>x.id===id);
+  if(!o){ ORDER_PAGE=null; return viewBackoffice(); }
+  const editable=canEdit('backoffice');
+  const backBtn=`<button class="btn-ghost" onclick="ORDER_PAGE=null;render();">← Back to Back Office</button>`;
+  const ro=(label,val)=>`<div><label>${label}</label><div style="padding:8px 0">${val||'<span class="muted">—</span>'}</div></div>`;
+  const fld=(label,fid,val,type)=>editable?`<div><label>${label}</label><input id="${fid}" ${type?`type="${type}"`:''} value="${val||''}"></div>`:ro(label,val);
+  const sel=(label,fid,options,cur)=>editable
+    ?`<div><label>${label}</label><select id="${fid}">${options.map(o2=>`<option ${o2===cur?'selected':''}>${o2}</option>`).join("")}</select></div>`
+    :ro(label,cur);
+  return `${backBtn}
+  <div class="flag warn" style="margin-top:12px">DSR Ref <b>${o.dsrNo||'-'}</b> · traced from the original agent call</div>
+  <div class="profile-grid" style="margin-top:14px">
+    <div>
+      <div class="card"><h3>Order — ${o.customer}</h3>
+        <div class="row">${fld("PID",'o_pid',o.pid)}${fld("Order No",'o_ord',o.ord)}</div>
+        <div class="row">${fld("e& Order Number",'o_eord',o.eOrderNo)}</div>
+        <div class="row">${sel("SR Type",'o_sr',["NEW","MNP"],o.sr)}${fld("Contract",'o_con',o.contract)}</div>
+        <div class="row">${sel("Status",'o_st',ORDER_STATUS,o.status)}${fld("Activation Date",'o_act',o.actDate,'date')}</div>
+        <div class="row">${fld("Remarks / Reason",'o_re',o.remarks)}</div>
+      </div>
+      ${editable?`<button class="btn-primary" onclick="saveOrder('${o.id}')">💾 Save Changes</button> ${backBtn}`:''}
+    </div>
+    <div>
+      <div class="card"><h3>Info</h3>
+        <p class="muted" style="font-size:12px;margin-top:0">Processed with e& · Account Manager: <b>${o.eAcctMgr||'Ankit'}</b> · e& Director: <b>Khalifa</b> <span class="muted">(external — reference only)</span></p>
+        <div class="flag good">Commission (15% of MRC): <b>${AED(o.commission)}</b></div>
+        <button class="btn-ghost" onclick="openCase('${o.dsrNo}')">💬 Case</button>
+        ${editable?`<button class="btn-ghost" onclick="waitAgent('${o.id}')">⏳ Waiting for Agent</button>`:''}
+        <button class="btn-ghost" onclick="openHistoryByNo('${o.dsrNo}')">History</button>
+      </div>
+    </div>
+  </div>`;
+}
+function saveOrder(id){
+  if(!canEdit('backoffice')) return;
+  const o=DB.orders.find(x=>x.id===id); if(!o) return;
+  const oldSt=o.status, oldPid=o.pid, oldAct=o.actDate, oldEord=o.eOrderNo;
+  const nextStatus=$("o_st").value;
+  if((nextStatus==="Activated"||nextStatus==="Closed") && !$("o_act").value){ alert("Activation date is required before marking an order activated/closed."); return; }
+  o.pid=$("o_pid").value.trim();o.ord=$("o_ord").value.trim();o.eOrderNo=$("o_eord").value.trim();o.sr=$("o_sr").value;o.contract=$("o_con").value.trim();
+  o.status=nextStatus;o.actDate=$("o_act").value;o.remarks=$("o_re").value.trim();
+  if(o.status!==oldSt){ logByDsrNo(o.dsrNo,`Order status: ${oldSt} → ${o.status}`,"Back Office"); notify([o.agent,...mgmtChain(o.agent).slice(0,1)], `Order ${o.dsrNo} (${o.customer}) status → ${o.status}`, {dsrNo:o.dsrNo}); }
+  if(o.pid!==oldPid && o.pid) logByDsrNo(o.dsrNo,`PID assigned: ${o.pid}`,"Back Office");
+  if(o.eOrderNo!==oldEord && o.eOrderNo) logByDsrNo(o.dsrNo,`e& Order Number set: ${o.eOrderNo}`,"Back Office");
+  if(o.actDate!==oldAct && o.actDate) logByDsrNo(o.dsrNo,`Activated on ${o.actDate}`,"Back Office");
+  save(); toast("Order saved."); render();
+}
+function waitAgent(id){
+  const o=DB.orders.find(x=>x.id===id); if(!o)return;
+  o.status="Waiting for Agent"; o.remarks=(o.remarks?o.remarks+" · ":"")+"Awaiting update from agent";
+  logByDsrNo(o.dsrNo,`Back Office set status: Waiting for update from agent (${o.agent})`,"Back Office");
+  notify([o.agent,...mgmtChain(o.agent).slice(0,1)], `⏳ Back Office is waiting for your update on ${o.dsrNo} (${o.customer})`, {dsrNo:o.dsrNo});
+  save(); render();
+}
+
+/* ============================================================
+   CASE PANEL — shared chat, documents, comments & timeline
+   ============================================================ */
+function threadFor(dsrNo){
+  const d=DB.dsr.find(x=>x.dsrNo===dsrNo);
+  const sys=(d&&d.history?d.history:[]).map(h=>({ts:h.ts,user:h.user,role:"system",stage:h.stage,type:"sys",text:h.text}));
+  const human=(DB.threads&&DB.threads[dsrNo])?DB.threads[dsrNo]:[];
+  return sys.concat(human);
+}
+function caseContext(dsrNo){
+  const o=DB.orders.find(x=>x.dsrNo===dsrNo),p=DB.pipeline.find(x=>x.dsrNo===dsrNo),d=DB.dsr.find(x=>x.dsrNo===dsrNo);
+  return {company:(o&&o.customer)||(p&&p.company)||(d&&d.company)||"",
+          status:(o&&o.status)||(p&&p.stage)||(d&&d.status)||"",
+          agent:(p&&p.agent)||(o&&o.agent)||(d&&d.agent)||""};
+}
+function caseStakeholders(dsrNo){ const c=caseContext(dsrNo); return [...new Set([c.agent,...mgmtChain(c.agent),...backOfficeNames()])].filter(Boolean); }
+// ---- Per-user unread message tracking (stored per browser) ----
+function seenKey(){ return "digicoo_seen_"+((SESSION&&SESSION.name)||"x"); }
+function loadSeen(){ try{ SEEN=JSON.parse(localStorage.getItem(seenKey())||"{}"); }catch(e){ SEEN={}; } }
+function markSeen(dsrNo){ const t=(DB.threads&&DB.threads[dsrNo])?DB.threads[dsrNo].length:0; SEEN[dsrNo]=t; try{ localStorage.setItem(seenKey(),JSON.stringify(SEEN)); }catch(e){} }
+function unreadCount(dsrNo){ const t=(DB.threads&&DB.threads[dsrNo])?DB.threads[dsrNo]:[]; const seen=SEEN[dsrNo]||0; let n=0; for(let i=seen;i<t.length;i++){ if(t[i].type!=="sys" && t[i].user!==(SESSION&&SESSION.name)) n++; } return n; }
+function chatBtn(dsrNo){
+  const u=unreadCount(dsrNo);
+  return `<button class="btn-ghost chatbtn" onclick="event.stopPropagation();openCase('${dsrNo}')" title="Case chat &amp; documents">💬${u>0?`<span class="cbadge">${u>9?'9+':u}</span>`:''}</button>`;
+}
+const _esc=s=>String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function parseMentions(text){ return DB.employees.filter(e=>new RegExp("@"+_esc(e.name)+"(?![A-Za-z])","i").test(text)).map(e=>e.name); }
+function highlightMentions(t){ let s=t; DB.employees.forEach(e=>{ s=s.replace(new RegExp("@"+_esc(e.name)+"(?![A-Za-z])","gi"), m=>`<span class="mention">${m}</span>`); }); return s; }
+function tagInsert(name){ const el=document.getElementById("cmsg"); if(!el)return; el.value=(el.value?el.value.replace(/\s*$/,"")+" ":"")+"@"+name+" "; el.focus(); }
+function openCase(dsrNo){
+  closeMenu(); CASE_OPEN=dsrNo; markSeen(dsrNo);
+  const t=threadFor(dsrNo), ctx=caseContext(dsrNo), me=SESSION&&SESSION.name;
+  const rn=r=>ROLES[r]?ROLES[r].name:r;
+  const chips=caseStakeholders(dsrNo).filter(n=>n!==me).map(n=>`<button class="chip" onclick="tagInsert('${n}')">@${n}</button>`).join("");
+  const items=t.map(x=>{
+    if(x.type==="sys") return `<div class="csys"><span class="tag" style="background:#3b82f622;color:var(--muted)">${x.stage||"Update"} · ${x.text}</span><div><small class="muted">${x.ts}</small></div></div>`;
+    const mine=x.user===me;
+    if(x.type==="file") return `<div class="${mine?'cmsg-me':'cmsg'}"><span class="cfile">📎 <b>${x.file}</b>${x.text?' · '+x.text:''}<div><small class="muted">${x.user} · ${rn(x.role)} · ${x.ts}</small></div></span></div>`;
+    return `<div class="${mine?'cmsg-me':'cmsg'}"><span class="bub"><div style="font-size:11px;opacity:.85;margin-bottom:2px"><b>${x.user}</b> · ${rn(x.role)}</div>${highlightMentions(x.text)}<div><small style="opacity:.7">${x.ts}</small></div></span></div>`;
+  }).join("");
+  document.getElementById("caseHost").innerHTML=`<div class="drawerback" onclick="closeCase()"></div>
+    <div class="drawer">
+      <div class="dhead">
+        <div style="display:flex;justify-content:space-between;align-items:center"><b style="color:var(--brand2)">${dsrNo}</b><button class="btn-ghost" style="padding:4px 10px" onclick="closeCase()">✕</button></div>
+        <div style="margin-top:4px">${ctx.company} ${ctx.status?`<span class="tag" style="background:${statusColor(ctx.status)}22;color:${statusColor(ctx.status)}">${ctx.status}</span>`:''}</div>
+        <small class="muted">Shared case thread · Agent, Back Office, TL, Teams Head &amp; Sales Head</small>
+      </div>
+      <div class="dbody" id="caseBody">${items||'<p class="muted">No activity yet. Start the conversation below.</p>'}</div>
+      <div style="padding:8px 14px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><small class="muted">Tag:</small>${chips}</div>
+      <div class="dfoot">
+        <input id="cmsg" placeholder="Message… use @name to tag" onkeydown="if(event.key==='Enter')sendCaseMsg('${dsrNo}')">
+        <button class="btn-ghost" onclick="attachCaseFile('${dsrNo}')" title="Attach document">📎</button>
+        <button class="btn-primary" onclick="sendCaseMsg('${dsrNo}')">Send</button>
+      </div>
+    </div>`;
+  const b=document.getElementById("caseBody"); if(b) b.scrollTop=b.scrollHeight;
+}
+function closeCase(){ CASE_OPEN=null; document.getElementById("caseHost").innerHTML=""; render(); }
+function sendCaseMsg(dsrNo){
+  const el=document.getElementById("cmsg"); const v=((el&&el.value)||"").trim(); if(!v)return;
+  const mentioned=parseMentions(v);
+  DB.threads=DB.threads||{}; (DB.threads[dsrNo]=DB.threads[dsrNo]||[]).push({ts:nowTs(),user:SESSION.name,role:SESSION.role,type:"msg",text:v,mentions:mentioned});
+  const recips=[...new Set([...caseStakeholders(dsrNo),...mentioned])].filter(n=>n!==SESSION.name);
+  recips.forEach(r=>{
+    const tagged=mentioned.includes(r);
+    notify([r], `${tagged?'🔔 '+SESSION.name+' tagged you':'💬 '+SESSION.name} on ${dsrNo}: ${v.slice(0,60)}`, {dsrNo});
+  });
+  save(); openCase(dsrNo); renderBell();
+}
+function attachCaseFile(dsrNo){
+  const name=prompt("File name to attach (demo):","document.pdf"); if(!name)return;
+  DB.threads=DB.threads||{}; (DB.threads[dsrNo]=DB.threads[dsrNo]||[]).push({ts:nowTs(),user:SESSION.name,role:SESSION.role,type:"file",file:name,text:""});
+  notify(caseStakeholders(dsrNo).filter(n=>n!==SESSION.name), `📎 ${SESSION.name} attached ${name} to ${dsrNo}`, {dsrNo});
+  save(); openCase(dsrNo);
+}
+
+/* ============================================================
+   MIS & TARGETS
+   ============================================================ */
+function viewMIS(){
+  const ags=visibleAgents();
+  const rows=ags.map(a=>{
+    const emp=DB.employees.find(e=>e.name===a)||{};
+    const ord=DB.orders.filter(o=>o.agent===a && recVisible(o));
+    const sub=ord.reduce((s,o)=>s+o.mrc,0);
+    const act=ord.filter(o=>o.status==="Activated"||o.status==="Closed").reduce((s,o)=>s+o.mrc,0);
+    const comm=ord.filter(o=>o.status==="Activated"||o.status==="Closed").reduce((s,o)=>s+o.commission,0);
+    const hold=ord.filter(o=>o.status==="On Hold"||o.status==="E& In-process"||o.status==="Submitted").reduce((s,o)=>s+o.mrc,0);
+    return {a,tl:emp.tl,tgt:emp.target,sub,act,comm,hold,subP:emp.target?Math.round(sub/emp.target*100):0,actP:emp.target?Math.round(act/emp.target*100):0};
+  });
+  const tot=k=>rows.reduce((s,r)=>s+r[k],0);
+  let body=rows.map(r=>`<tr>
+    <td>${r.a}</td><td class="muted">${r.tl}</td><td>${AED(r.tgt)}</td>
+    <td>${AED(r.sub)}</td><td>${AED(r.act)}</td><td>${tag(r.actP+"%")}</td>
+    <td style="color:var(--amber)">${AED(r.hold)}</td><td style="color:var(--green)">${AED(r.comm)}</td></tr>`).join("");
+  body+=`<tr class="fkeep" style="font-weight:800"><td>TOTAL</td><td></td><td>${AED(tot("tgt"))}</td><td>${AED(tot("sub"))}</td><td>${AED(tot("act"))}</td><td>${tot("tgt")?Math.round(tot("act")/tot("tgt")*100):0}%</td><td>${AED(tot("hold"))}</td><td>${AED(tot("comm"))}</td></tr>`;
+
+  // status breakdown
+  const sb=ORDER_STATUS.map(s=>{const lst=DB.orders.filter(o=>o.status===s && recVisible(o));return `<tr><td>${tag(s)}</td><td>${lst.length}</td><td>${AED(lst.reduce((a,o)=>a+o.mrc,0))}</td></tr>`}).join("");
+
+  const misCols=["Agent","TL","Target","Submitted","Activated","Ach%","Pending MRC","Commission"];
+  return `<div class="toolbar"><button class="btn-ghost" onclick="exportMIS()">Export MIS CSV</button></div><div class="card"><h3>Sales MIS — Target vs Submission vs Activation</h3>
+    <div class="scroll" style="max-height:46vh"><table><tr>${misCols.map(c=>`<th>${c}</th>`).join("")}</tr>${colFilterRow(misCols)}${body}</table></div></div>
+    <div class="grid2">
+      <div class="card"><h3>Order Status Breakdown</h3><table><tr><th>Status</th><th>Count</th><th>MRC</th></tr>${sb}</table></div>
+      <div class="card"><h3>Team Leader Roll-up</h3>${tlRollup()}</div>
+    </div>`;
+}
+function tlRollup(){
+  const ord=DB.orders.filter(o=>(o.status==="Activated"||o.status==="Closed") && recVisible(o));
+  const tls=[...new Set(ord.map(o=>o.tl).filter(Boolean))];
+  return `<table><tr><th>Team Leader (owner)</th><th>Agents</th><th>Activated MRC</th><th>Commission</th></tr>`+
+    tls.map(tl=>{
+      const t=ord.filter(o=>o.tl===tl);
+      const agents=[...new Set(t.map(o=>o.agent))].length;
+      return `<tr><td>${tl}</td><td>${agents}</td><td>${AED(t.reduce((s,o)=>s+o.mrc,0))}</td><td style="color:var(--green)">${AED(t.reduce((s,o)=>s+o.commission,0))}</td></tr>`;
+    }).join("")+`</table>`;
+}
+
+/* ============================================================
+   HR
+   ============================================================ */
+// ---- Compliance document tracking (UAE) ----
+const DOC_FIELDS=[
+  {key:"passportExpiry",label:"Passport"},
+  {key:"visaExpiry",label:"Visa"},
+  {key:"eidExpiry",label:"Emirates ID"},
+  {key:"labourCardExpiry",label:"Labour Card"},
+  {key:"insuranceExpiry",label:"Insurance"}
+];
+function docHealth(e){
+  const today=new Date().toISOString().slice(0,10);
+  const in30=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
+  const missing=[],expired=[],expiring=[];
+  DOC_FIELDS.forEach(d=>{
+    const v=e[d.key];
+    if(!v) missing.push(d.label);
+    else if(v<today) expired.push(d.label);
+    else if(v<=in30) expiring.push(d.label);
+  });
+  if(expired.length) return {level:"bad",text:expired.join(", ")+" expired"};
+  if(missing.length||expiring.length) return {level:"warn",text:[...missing.map(m=>m+" missing"),...expiring.map(m=>m+" expiring soon")].join(", ")};
+  return {level:"good",text:"All compliant"};
+}
+function docHealthBadge(e){
+  const h=docHealth(e); const c=h.level==="bad"?"var(--brand2)":h.level==="warn"?"var(--amber)":"var(--green)";
+  return `<span class="tag" style="background:${c}22;color:${c}">${h.text}</span>`;
+}
+// Reads a file input, converts to a base64 data URL, and hands it to cb. Guards against blowing the localStorage quota.
+function fileToDataUrl(input,cb,statusElId){
+  const f=input.files&&input.files[0]; if(!f) return;
+  if(f.size>800*1024){ alert("Demo limit: please use an image under 800KB — this demo stores files in browser localStorage, which has a small size cap. A production build would upload to real file storage instead."); input.value=""; return; }
+  const r=new FileReader();
+  r.onload=()=>{ cb(r.result); if(statusElId){ const el=$(statusElId); if(el) el.textContent="✓ "+f.name; } };
+  r.readAsDataURL(f);
+}
+function viewHR(){
+  if(EMP_PAGE) return viewEmployeeProfile(EMP_PAGE);
+  if(HR_SUB==="active") return viewHRList(DB.employees.filter(e=>e.active!==false),"Active Employees — currently employed staff only");
+  if(HR_SUB==="passport") return viewHRPassport();
+  return viewHRList(DB.employees,"All Employees — full roster, including inactive");
+}
+function hrRow(e){
+  const h=docHealth(e); const dot=h.level==="good"?"":`<span title="${h.text}" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${h.level==='bad'?'var(--brand2)':'var(--amber)'};margin-left:6px"></span>`;
+  return `<tr style="cursor:pointer" onclick="EMP_PAGE='${e.id}';render();">
+    <td>${e.id}</td><td>${e.name}${dot}${e.active===false?' <span class="tag" style="background:var(--brand2)22;color:var(--brand2)">Inactive</span>':''}</td><td>${e.desig}</td><td><span class="tag" style="background:#3b82f622;color:var(--blue)">${ROLES[e.role].name}</span></td>
+    <td>${e.dept}</td><td>${e.tl}</td><td>${e.join}</td><td>${e.salary?AED(e.salary):'-'}</td>
+    <td>${docHealthBadge(e)}</td>
+    <td class="muted">${canEdit('hr')?'Edit ›':'View ›'}</td></tr>`;
+}
+function viewHRList(list,subtitle){
+  const body=list.map(hrRow).join("");
+  const heads=DB.employees.length, sales=DB.employees.filter(e=>e.dept==="e& Sales").length;
+  const cost=DB.employees.reduce((s,e)=>s+e.salary,0);
+  const flagged=DB.employees.filter(e=>docHealth(e).level!=="good").length;
+  return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <span class="muted">${subtitle}</span>
+      ${canEdit('hr')?'<button class="btn-primary" onclick="addEmpModal()">+ Add Employee / User</button>':''}
+    </div>
+    <div class="kpis">
+      ${kpi("Head Count",heads,"var(--blue)",sales+" in e& Sales")}
+      ${kpi("Monthly Salary Cost",AED(cost),"var(--amber)","Excl. commission")}
+      ${kpi("Departments",[...new Set(DB.employees.map(e=>e.dept))].length,"var(--purple)","")}
+      ${kpi("Compliance Flags",flagged,flagged?"var(--brand2)":"var(--green)","Missing / expiring / expired docs")}
+    </div>
+    ${assignCard()}
+    ${(()=>{const cols=["ID","Name","Designation","System Role","Dept","Reports To","Join Date","Salary","Compliance",null];
+      return `<div class="scroll"><table id="hTbl"><tr>${cols.map(c=>`<th>${c||''}</th>`).join("")}</tr>${colFilterRow(cols)}${body}</table></div>`;})()}`;
+}
+function viewHRPassport(){
+  const today=new Date().toISOString().slice(0,10), in30=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
+  const list=[...DB.employees].sort((a,b)=>(a.passportExpiry||"9999").localeCompare(b.passportExpiry||"9999"));
+  const expired=list.filter(e=>e.passportExpiry&&e.passportExpiry<today).length;
+  const missing=list.filter(e=>!e.passportExpiry).length;
+  const body=list.map(e=>{
+    const exp=e.passportExpiry;
+    const status=!exp?{l:"warn",t:"Missing"}:exp<today?{l:"bad",t:"Expired"}:exp<=in30?{l:"warn",t:"Expiring soon"}:{l:"good",t:"Valid"};
+    const c=status.l==="bad"?"var(--brand2)":status.l==="warn"?"var(--amber)":"var(--green)";
+    return `<tr style="cursor:pointer" onclick="EMP_PAGE='${e.id}';render();"><td>${e.id}</td><td>${e.name}</td><td>${e.passportNo||'-'}</td><td>${exp||'-'}</td><td><span class="tag" style="background:${c}22;color:${c}">${status.t}</span></td>
+      <td class="muted">${canEdit('hr')?'Edit ›':'View ›'}</td></tr>`;
+  }).join("");
+  const cols=["ID","Name","Passport No.","Expiry","Status",null];
+  return `<div class="kpis">
+      ${kpi("Total Employees",list.length,"var(--blue)","")}
+      ${kpi("Expired Passports",expired,expired?"var(--brand2)":"var(--green)","")}
+      ${kpi("Missing Passport Info",missing,missing?"var(--amber)":"var(--green)","")}
+    </div>
+    <div class="card"><h3>Passport Management</h3>
+    <div class="scroll"><table><tr>${cols.map(c=>`<th>${c||''}</th>`).join("")}</tr>${colFilterRow(cols)}${body}</table></div></div>`;
+}
+function assignCard(){
+  const edit=canEdit('hr');
+  const tls=DB.employees.filter(e=>e.role==="team_leader");
+  const agents=DB.employees.filter(e=>e.role==="agent");
+  const rows=agents.map(a=>{
+    const cur=(a.tl&&a.tl!=="-")?a.tl:'<span class="muted">Unassigned</span>';
+    const sel=`<select onchange="reassignAgent('${a.id}',this.value)">
+        <option value="">— reassign… —</option>
+        ${tls.filter(t=>t.name!==a.tl).map(t=>`<option value="${t.name}">→ ${t.name}</option>`).join("")}
+        ${a.tl&&a.tl!=="-"?'<option value="-">→ Unassign</option>':''}
+      </select>`;
+    return `<tr><td>${a.name}</td><td>${cur}</td>${edit?`<td>${sel}</td>`:''}</tr>`;
+  }).join("");
+  return `<div class="card"><h3>Agent → Team Leader Assignment ${edit?'<span class="badge">EDITABLE</span>':''}</h3>
+    <div class="flag warn" style="margin-top:0">Privacy: when an agent is reassigned, the new Team Leader sees only records created <b>from that point on</b>. Past records stay private to the previous Team Leader.</div>
+    <table><tr><th>Agent</th><th>Current Team Leader</th>${edit?'<th>Reassign</th>':''}</tr>${rows}</table></div>`;
+}
+function reassignAgent(empId,newTL){
+  if(!canEdit('hr')||!newTL) return;
+  const e=DB.employees.find(x=>x.id===empId); if(!e)return;
+  const old=e.tl;
+  e.tl=newTL; e.reportsTo=(newTL==="-")?"-":newTL;
+  save(); render();
+  alert(`${e.name} reassigned: ${old&&old!=="-"?old:"Unassigned"} → ${newTL==="-"?"Unassigned":newTL}.\n\nThe new Team Leader will only see ${e.name}'s NEW records. Past records remain with ${old&&old!=="-"?old:"the previous owner"}.`);
+}
+function docImgView(label,val){
+  return `<div style="margin-bottom:8px"><label>${label}</label>${val?`<img src="${val}" style="max-height:56px;border-radius:6px;border:1px solid var(--line)">`:'<span class="muted">No image uploaded</span>'}</div>`;
+}
+let PENDING_EMP_DOCS={};
+// Full-page employee profile — replaces the old view/edit modals. `editable` drives whether
+// fields render as inputs or plain text; there is no separate read-only function anymore.
+function viewEmployeeProfile(id){
+  const e=DB.employees.find(x=>x.id===id);
+  if(!e){ EMP_PAGE=null; return viewHR(); }
+  const editable=canEdit('hr');
+  PENDING_EMP_DOCS={};
+  const h=docHealth(e);
+  const backBtn=`<button class="btn-ghost" onclick="EMP_PAGE=null;render();">← Back to Employees</button>`;
+  const ro=(label,val)=>`<div><label>${label}</label><div style="padding:8px 0">${val||'<span class="muted">—</span>'}</div></div>`;
+  const fld=(label,fid,val,type)=>editable
+    ?`<div><label>${label}</label><input id="${fid}" ${type?`type="${type}"`:''} value="${val||''}"></div>`
+    :ro(label,val);
+  const sel=(label,fid,options,cur)=>editable
+    ?`<div><label>${label}</label><select id="${fid}">${options.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join("")}</select></div>`
+    :ro(label,cur);
+  const roleFld=editable
+    ?`<div><label>System Role</label><select id="e_rl">${Object.keys(ROLES).map(r=>`<option value="${r}" ${r===e.role?'selected':''}>${ROLES[r].name}</option>`).join("")}</select></div>`
+    :ro("System Role",ROLES[e.role].name);
+  const img=(label,val,key,statId)=>`<div style="margin-bottom:10px"><label>${label}</label>${val?`<div><img src="${val}" style="max-height:64px;border-radius:6px;border:1px solid var(--line)"></div>`:'<span class="muted">No image uploaded</span>'}${editable?`<input type="file" accept="image/*" onchange="fileToDataUrl(this,url=>PENDING_EMP_DOCS['${key}']=url,'${statId}')"><small id="${statId}" class="muted"></small>`:''}</div>`;
+  return `${backBtn}
+  <div class="flag ${h.level==='bad'?'bad':h.level==='warn'?'warn':'good'}" style="margin-top:12px">${h.text}</div>
+  <div class="profile-grid" style="margin-top:14px">
+    <div>
+      <div class="card"><h3>Identity</h3>
+        <div class="row">${ro("Employee ID",e.id)}${fld("Full Name",'e_nm',e.name)}</div>
+        <div class="row">${fld("Designation",'e_dg',e.desig)}${roleFld}</div>
+        <div class="row">${fld("Department",'e_dp',e.dept)}${fld("Reports To",'e_tl',e.tl)}</div>
+        <div class="row">${fld("Email",'e_em',e.email,'email')}${fld("Phone",'e_ph',e.phone)}</div>
+        <div class="row">${fld("Join Date",'e_jn',e.join,'date')}${sel("Status",'e_ac',["Active","Inactive"],e.active===false?"Inactive":"Active")}</div>
+        <div class="row">${fld("Monthly Target (MRC)",'e_tg',e.target,'number')}</div>
+      </div>
+      ${editable?`<div class="card"><h3>Compensation &amp; Login</h3>
+        <div class="row">${fld("Monthly Salary (AED)",'e_sal',e.salary,'number')}${fld("Login Username",'e_un',e.username)}</div>
+        <div class="row"><div><label>Password</label><div style="padding:8px 0"><button class="btn-ghost" onclick="resetPasswordModal('${e.id}')">Change Password</button></div></div></div>
+      </div>`:''}
+      <div class="card"><h3>Personal</h3>
+        <div class="row">${fld("Date of Birth",'e_dob',e.dob,'date')}${fld("Nationality",'e_nat',e.nationality)}</div>
+      </div>
+      <div class="card"><h3>Passport</h3>
+        <div class="row">${fld("Passport No.",'e_pn',e.passportNo)}${fld("Passport Expiry",'e_pe',e.passportExpiry,'date')}</div>
+        ${img("Passport Image",e.passportImg,'passportImg','e_pi_st')}
+      </div>
+      <div class="card"><h3>Visa</h3>
+        <div class="row">${fld("Visa / Sponsor Company",'e_vc',e.visaCompany)}${fld("Visa Expiry",'e_ve',e.visaExpiry,'date')}</div>
+        ${img("Visa Image",e.visaImg,'visaImg','e_vi_st')}
+      </div>
+      <div class="card"><h3>Emirates ID</h3>
+        <div class="row">${fld("EID Number",'e_eid',e.eid)}${fld("Issue Date",'e_eidi',e.eidIssue,'date')}${fld("Expiry Date",'e_eide',e.eidExpiry,'date')}</div>
+        <div class="row">${img("EID Front",e.eidImgF,'eidImgF','e_ef_st')}${img("EID Back",e.eidImgB,'eidImgB','e_eb_st')}</div>
+      </div>
+      <div class="card"><h3>Labour Card (MOHRE)</h3>
+        <div class="row">${fld("Labour Card No.",'e_lc',e.labourCardNo)}${fld("Issue Date",'e_lci',e.labourCardIssue,'date')}${fld("Expiry Date",'e_lce',e.labourCardExpiry,'date')}</div>
+        ${img("Labour Card Image",e.labourCardImg,'labourCardImg','e_lc_st')}
+      </div>
+      <div class="card"><h3>Insurance</h3>
+        <div class="row">${fld("Issue Date",'e_insi',e.insuranceIssue,'date')}${fld("Expiry Date",'e_inse',e.insuranceExpiry,'date')}</div>
+        <div class="row">${img("Insurance Front",e.insuranceImgF,'insuranceImgF','e_if_st')}${img("Insurance Back",e.insuranceImgB,'insuranceImgB','e_ib_st')}</div>
+      </div>
+      <div class="card"><h3>Legal</h3>${sel("Legal Case",'e_lg',["None","Open","Closed"],e.legalCase||"None")}</div>
+      ${editable?`<button class="btn-primary" onclick="saveEmployeeProfile('${e.id}')">💾 Save Changes</button> ${backBtn}`:''}
+    </div>
+    <div>
+      <div class="card"><h3>Profile Picture</h3>
+        ${e.profilePic?`<img src="${e.profilePic}" style="width:100%;border-radius:8px;border:1px solid var(--line)">`:'<div class="empty">No photo uploaded</div>'}
+        ${editable?`<div style="margin-top:8px"><input type="file" accept="image/*" onchange="fileToDataUrl(this,url=>PENDING_EMP_DOCS.profilePic=url,'e_pp_st')"><small id="e_pp_st" class="muted"></small></div>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+function saveEmployeeProfile(id){
+  if(!canEdit('hr')) return;
+  const e=DB.employees.find(x=>x.id===id); if(!e) return;
+  const nm=$("e_nm").value.trim(), un=$("e_un").value.trim();
+  if(!nm||!un){ alert("Employee name and username are required."); return; }
+  if(DB.employees.some(x=>x.id!==e.id && (x.username||"").toLowerCase()===un.toLowerCase())){ alert("That username is already used."); return; }
+  e.name=nm;e.desig=$("e_dg").value.trim();e.role=$("e_rl").value;e.dept=$("e_dp").value.trim();e.tl=$("e_tl").value.trim();
+  e.email=$("e_em").value.trim();e.phone=$("e_ph").value.trim();e.join=$("e_jn").value;e.active=$("e_ac").value!=="Inactive";
+  e.target=+$("e_tg").value;e.salary=+$("e_sal").value;e.username=un;
+  e.dob=$("e_dob").value;e.nationality=$("e_nat").value.trim();
+  e.passportNo=$("e_pn").value.trim();e.passportExpiry=$("e_pe").value;
+  e.visaCompany=$("e_vc").value.trim();e.visaExpiry=$("e_ve").value;
+  e.eid=$("e_eid").value.trim();e.eidIssue=$("e_eidi").value;e.eidExpiry=$("e_eide").value;
+  e.labourCardNo=$("e_lc").value.trim();e.labourCardIssue=$("e_lci").value;e.labourCardExpiry=$("e_lce").value;
+  e.insuranceIssue=$("e_insi").value;e.insuranceExpiry=$("e_inse").value;
+  e.legalCase=$("e_lg").value;
+  Object.assign(e,PENDING_EMP_DOCS);
+  save(); toast("Employee profile saved."); render();
+}
+function addEmpModal(){
+  if(!canEdit('hr')){ alert("This role cannot create users. Ask Admin to grant the capability first."); return; }
+  openModal("Add Employee",`
+    <div class="row"><div><label>Name</label><input id="a_nm"></div><div><label>Designation</label><input id="a_dg"></div></div>
+    <label>System Role</label><select id="a_rl">${Object.keys(ROLES).map(r=>`<option value="${r}">${ROLES[r].name}</option>`).join("")}</select>
+    <div class="row"><div><label>Department</label><input id="a_dp" value="e& Sales"></div><div><label>Reports To</label><input id="a_tl" value="Joy"></div></div>
+    <div class="row"><div><label>Salary (AED)</label><input id="a_sal" type="number" value="4000"></div><div><label>Target (MRC)</label><input id="a_tg" type="number" value="5000"></div></div>
+    <div class="row"><div><label>Login Username</label><input id="a_un" placeholder="auto from name if blank"></div><div><label>Login Password</label><input id="a_pw" placeholder="auto if blank"></div></div>
+  `,()=>{
+    const nm=$("a_nm").value.trim();
+    if(!nm){ alert("Employee name is required."); return false; }
+    const un=($("a_un").value||defUser(nm)).trim();
+    if(DB.employees.some(e=>(e.username||"").toLowerCase()===un.toLowerCase())){ alert("That username is already used."); return false; }
+    DB.employees.push({id:"E"+(DB.employees.length+1).toString().padStart(2,'0'),name:nm,role:$("a_rl").value,desig:$("a_dg").value.trim(),tl:$("a_tl").value.trim(),reportsTo:$("a_tl").value.trim(),mgr:"Maria",target:+$("a_tg").value,salary:+$("a_sal").value,join:new Date().toISOString().slice(0,10),dept:$("a_dp").value.trim(),username:un,password:$("a_pw").value||defUser(nm)+"@2026",active:true,email:"",phone:""});
+    save(); render();
+  });
+}
+
+/* ============================================================
+   PAYROLL (WPS + commission + gratuity)
+   ============================================================ */
+// ---- Employee Ledger (advances / loans / deductions — feeds Payroll) ----
+function empLedgerBalance(name){
+  return (DB.ledger||[]).filter(l=>l.emp===name && l.status==="Open" && (l.type==="Advance"||l.type==="Loan")).reduce((s,l)=>s+l.remaining,0);
+}
+function pendingDeduction(name){
+  return (DB.ledger||[]).filter(l=>l.emp===name && l.status==="Open" && (l.type==="Advance"||l.type==="Loan")).reduce((s,l)=>s+Math.min(l.installment||l.remaining,l.remaining),0);
+}
+function runPayrollMonth(){
+  if(!canEdit('payroll')){ alert("This role cannot run payroll."); return; }
+  const label=prompt("Payroll period label (e.g. July 2026):",new Date().toLocaleDateString('en-GB',{month:'long',year:'numeric'}));
+  if(!label) return;
+  DB.payrollRuns=DB.payrollRuns||[];
+  if(DB.payrollRuns.includes(label)){ alert(`Payroll for "${label}" has already been run — choose a different period to avoid double-deducting.`); return; }
+  let count=0;
+  DB.employees.forEach(e=>{
+    (DB.ledger||[]).filter(l=>l.emp===e.name && l.status==="Open" && (l.type==="Advance"||l.type==="Loan")).forEach(l=>{
+      const ded=Math.min(l.installment||l.remaining,l.remaining);
+      if(ded<=0) return;
+      l.remaining-=ded; if(l.remaining<=0){ l.remaining=0; l.status="Settled"; }
+      DB.ledger.push({id:"LD"+Date.now()+Math.floor(Math.random()*1000),emp:e.name,date:new Date().toISOString().slice(0,10),type:"Deduction",amount:ded,installment:0,remaining:0,status:"Settled",note:"Payroll deduction — "+label,createdBy:SESSION.name,parentId:l.id});
+      count++;
+    });
+  });
+  DB.payrollRuns.push(label);
+  save(); render();
+  alert(count?`Payroll run "${label}" complete — ${count} ledger deduction(s) applied.`:`Payroll run "${label}" complete — no outstanding advances/loans to deduct.`);
+}
+function addLedgerModal(){
+  if(!canEdit('payroll')){ alert("This role cannot manage the employee ledger."); return; }
+  const emps=DB.employees.filter(e=>e.salary>0);
+  openModal("New Advance / Loan",`
+    <label>Employee</label><select id="l_emp">${emps.map(e=>`<option>${e.name}</option>`).join("")}</select>
+    <label>Type</label><select id="l_ty"><option>Advance</option><option>Loan</option></select>
+    <div class="row"><div><label>Amount (AED)</label><input id="l_amt" type="number" value="1000"></div><div><label>Monthly Installment (AED)</label><input id="l_inst" type="number" value="250"></div></div>
+    <label>Note</label><textarea id="l_note" rows="2"></textarea>
+  `,()=>{
+    const amt=+$("l_amt").value, inst=+$("l_inst").value;
+    if(amt<=0){ alert("Amount must be positive."); return false; }
+    DB.ledger.push({id:"L"+Date.now(),emp:$("l_emp").value,date:new Date().toISOString().slice(0,10),type:$("l_ty").value,amount:amt,installment:inst,remaining:amt,status:"Open",note:$("l_note").value.trim(),createdBy:SESSION.name});
+    save(); render();
+  });
+}
+function exportLedger(){
+  const rows=DB.ledger.map(l=>[l.emp,l.date,l.type,l.amount,l.installment||0,l.remaining,l.status,l.note||""]);
+  downloadText("digitalcoo-employee-ledger.csv",toCsv([["Employee","Date","Type","Amount","Installment","Remaining","Status","Note"],...rows]),"text/csv;charset=utf-8");
+}
+function viewLedgerTab(){
+  const rows=[...(DB.ledger||[])].sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const cols=["Employee","Date","Type","Amount","Installment","Remaining","Status","Note"];
+  let body=rows.map(l=>`<tr>
+    <td>${l.emp}</td><td>${l.date}</td><td>${tag(l.type)}</td><td>${AED(l.amount)}</td>
+    <td>${l.installment?AED(l.installment):'-'}</td><td>${l.type==="Deduction"?'-':AED(l.remaining)}</td>
+    <td>${tag(l.status)}</td><td class="muted">${l.note||''}</td></tr>`).join("");
+  return `<div class="toolbar">${canEdit('payroll')?'<button class="btn-primary" onclick="addLedgerModal()">+ New Advance / Loan</button>':''}<button class="btn-ghost" onclick="exportLedger()">Export Ledger CSV</button><span class="muted">${rows.length} entries · advances/loans auto-deduct when payroll is run</span></div>
+    <div class="scroll"><table id="ldTbl"><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr>${colFilterRow(cols)}${body}</table></div>`;
+}
+let PAY_TAB="run";
+function viewPayroll(){
+  return PAY_TAB==='ledger'?viewLedgerTab():viewPayrollRun();
+}
+function viewPayrollRun(){
+  const rows=DB.employees.filter(e=>e.salary>0).map(e=>{
+    const comm=DB.orders.filter(o=>o.agent===e.name&&(o.status==="Activated"||o.status==="Closed")).reduce((s,o)=>s+o.commission,0);
+    const basic=Math.round(e.salary*0.6), allow=e.salary-basic;
+    const gross=e.salary+comm;
+    // simple gratuity accrual: 21 days basic per year of service, monthly accrual
+    const grat=Math.round(basic/30*21/12);
+    const ded=pendingDeduction(e.name);
+    const net=gross-ded;
+    return {...e,basic,allow,comm,gross,grat,ded,net};
+  });
+  const tot=k=>rows.reduce((s,r)=>s+r[k],0);
+  let body=rows.map(r=>`<tr>
+    <td>${r.name}</td><td>${r.desig}</td><td>${AED(r.basic)}</td><td>${AED(r.allow)}</td>
+    <td style="color:var(--green)">${AED(r.comm)}</td><td>${AED(r.gross)}</td>
+    <td style="color:${r.ded?'var(--brand2)':'inherit'}">${r.ded?'-'+AED(r.ded):AED(0)}</td>
+    <td><b>${AED(r.net)}</b></td><td class="muted">${AED(r.grat)}</td></tr>`).join("");
+  body+=`<tr style="font-weight:800"><td>TOTAL</td><td></td><td>${AED(tot("basic"))}</td><td>${AED(tot("allow"))}</td><td>${AED(tot("comm"))}</td><td>${AED(tot("gross"))}</td><td>${AED(tot("ded"))}</td><td>${AED(tot("net"))}</td><td>${AED(tot("grat"))}</td></tr>`;
+  const outstanding=DB.employees.reduce((s,e)=>s+empLedgerBalance(e.name),0);
+  return `<div class="kpis">
+      ${kpi("Gross Payroll (this month)",AED(tot("gross")),"var(--brand2)",rows.length+" employees")}
+      ${kpi("Commission Payout",AED(tot("comm")),"var(--green)","On activated MRC")}
+      ${kpi("Outstanding Advances/Loans",AED(outstanding),outstanding?"var(--amber)":"var(--green)","Employee ledger balance")}
+      ${kpi("WPS Status","Ready","var(--blue)","SIF file exportable")}
+    </div>
+    <div class="card"><h3>Payroll Run <span class="badge">WPS</span></h3>
+    <div class="scroll"><table><tr><th>Employee</th><th>Designation</th><th>Basic (60%)</th><th>Allowances</th><th>Commission</th><th>Gross Pay</th><th>Ledger Deduction</th><th>Net Pay</th><th>Gratuity/mo</th></tr>${body}</table></div>
+    <p class="muted" style="font-size:12px;margin-top:10px">Demo logic: Basic = 60% of salary; commission = 15% of activated MRC; gratuity = 21 days basic per year (UAE EOSB), accrued monthly. Ledger Deduction previews the outstanding advance/loan installment that "Run Payroll" will apply this period.</p>
+    ${canEdit('payroll')?'<button class="btn-primary" onclick="runPayrollMonth()">▶ Run Payroll (apply ledger deductions)</button> <button class="btn-ghost" onclick="exportWPS()">Generate WPS Demo File</button> <button class="btn-ghost" onclick="exportPayroll()">Export Payroll CSV</button>':''}</div>`;
+}
+
+/* ============================================================
+   ACCOUNTING (VAT + IFRS P&L)
+   ============================================================ */
+// ---- Chart of Accounts ----
+function accountBalance(id){
+  const opening=(DB.accounts.find(a=>a.id===id)||{}).opening||0;
+  return opening+(DB.accountTx||[]).filter(t=>t.account===id).reduce((s,t)=>s+t.amount,0);
+}
+function addAccountModal(){
+  if(!canEdit('accounting')){ alert("This role cannot manage the chart of accounts."); return; }
+  openModal("New Account",`
+    <label>Account Name</label><input id="ac_nm" placeholder="e.g. ADIB Current Account">
+    <label>Type</label><select id="ac_ty"><option>Bank</option><option>Cash</option></select>
+    <label>Opening Balance (AED)</label><input id="ac_op" type="number" value="0">
+  `,()=>{
+    const nm=$("ac_nm").value.trim(); if(!nm){ alert("Account name is required."); return false; }
+    DB.accounts.push({id:"ACC"+Date.now(),name:nm,type:$("ac_ty").value,opening:+$("ac_op").value});
+    save(); render();
+  });
+}
+function editAccountModal(id){
+  if(!canEdit('accounting')) return;
+  const a=DB.accounts.find(x=>x.id===id); if(!a) return;
+  openModal("Edit Account",`
+    <label>Account Name</label><input id="ac_nm" value="${a.name}">
+    <label>Type</label><select id="ac_ty"><option ${a.type==='Bank'?'selected':''}>Bank</option><option ${a.type==='Cash'?'selected':''}>Cash</option></select>
+    <label>Opening Balance (AED)</label><input id="ac_op" type="number" value="${a.opening}">
+  `,()=>{
+    a.name=$("ac_nm").value.trim(); a.type=$("ac_ty").value; a.opening=+$("ac_op").value;
+    save(); render();
+  });
+}
+function recordTxModal(){
+  if(!canEdit('accounting')){ alert("This role cannot post transactions."); return; }
+  openModal("Record Transaction",`
+    <label>Account</label><select id="tx_ac">${DB.accounts.map(a=>`<option value="${a.id}">${a.name}</option>`).join("")}</select>
+    <label>Type</label><select id="tx_ty"><option>Deposit</option><option>Withdrawal</option></select>
+    <div class="row"><div><label>Date</label><input id="tx_dt" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Amount (AED)</label><input id="tx_amt" type="number" value="1000"></div></div>
+    <label>Note</label><textarea id="tx_note" rows="2"></textarea>
+  `,()=>{
+    const amt=+$("tx_amt").value; if(amt<=0){ alert("Amount must be positive."); return false; }
+    const signed=$("tx_ty").value==="Withdrawal"?-amt:amt;
+    DB.accountTx.push({id:"TX"+Date.now(),date:$("tx_dt").value,account:$("tx_ac").value,type:$("tx_ty").value,amount:signed,note:$("tx_note").value.trim()});
+    save(); render();
+  });
+}
+function openAccountTx(id){
+  const a=DB.accounts.find(x=>x.id===id); if(!a) return;
+  const rows=(DB.accountTx||[]).filter(t=>t.account===id).sort((x,y)=>(y.date||"").localeCompare(x.date||""));
+  const body=rows.length?rows.map(t=>`<tr><td>${t.date}</td><td>${tag(t.type)}</td><td style="color:${t.amount<0?'var(--brand2)':'var(--green)'}">${t.amount<0?'-':''}${AED(Math.abs(t.amount))}</td><td class="muted">${t.note||''}</td></tr>`).join(""):'<tr><td colspan="4" class="muted">No transactions yet.</td></tr>';
+  openModalInfo(`${a.name} — Transactions`,`
+    <div class="flag good" style="margin-top:0">Opening ${AED(a.opening)} · Running balance <b>${AED(accountBalance(id))}</b></div>
+    <div class="scroll" style="max-height:50vh"><table><tr><th>Date</th><th>Type</th><th>Amount</th><th>Note</th></tr>${body}</table></div>`);
+}
+function exportAccounts(){
+  const rows=DB.accounts.map(a=>[a.name,a.type,a.opening,accountBalance(a.id)]);
+  downloadText("digitalcoo-accounts.csv",toCsv([["Account","Type","Opening","Running Balance"],...rows]),"text/csv;charset=utf-8");
+}
+function viewChartOfAccounts(){
+  const editable=canEdit('accounting');
+  const rows=DB.accounts.map(a=>`<tr><td>${a.name}</td><td>${tag(a.type)}</td><td>${AED(a.opening)}</td><td><b>${AED(accountBalance(a.id))}</b></td>
+    <td style="white-space:nowrap"><button class="btn-ghost" onclick="openAccountTx('${a.id}')">${editable?'Transactions':'View'}</button>${editable?` <button class="btn-ghost" onclick="editAccountModal('${a.id}')">Edit</button>`:''}</td></tr>`).join("");
+  const ar=DB.invoices.filter(i=>i.type==="Commission Income"&&i.status==="Outstanding").reduce((s,i)=>s+i.total,0);
+  const ap=DB.invoices.filter(i=>i.type==="Expense"&&i.status==="Outstanding").reduce((s,i)=>s+i.total,0);
+  const totalCash=DB.accounts.reduce((s,a)=>s+accountBalance(a.id),0);
+  return `<div class="kpis">
+      ${kpi("Total Cash & Bank",AED(totalCash),"var(--green)",DB.accounts.length+" accounts")}
+      ${kpi("Accounts Receivable",AED(ar),"var(--blue)","Outstanding customer invoices")}
+      ${kpi("Accounts Payable",AED(ap),"var(--amber)","Outstanding vendor bills")}
+      ${kpi("Net Position",AED(totalCash+ar-ap),"var(--purple)","Cash + AR − AP")}
+    </div>
+    <div class="card"><h3>Chart of Accounts ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
+      <div class="toolbar">${editable?'<button class="btn-primary" onclick="addAccountModal()">+ New Account</button> <button class="btn-ghost" onclick="recordTxModal()">+ Record Transaction</button>':''}<button class="btn-ghost" onclick="exportAccounts()">Export CSV</button></div>
+      <table><tr><th>Account</th><th>Type</th><th>Opening</th><th>Running Balance</th><th></th></tr>${rows}</table>
+      <p class="muted" style="font-size:12px;margin-top:8px">Receivables/Payables are rolled up automatically from Invoices &amp; Bills (P&amp;L tab) — not separate postable accounts.</p>
+    </div>`;
+}
+// ---- Cheques (PDC) management ----
+function chequeStatus(id,status){
+  if(!canEdit('accounting')) return;
+  const c=DB.cheques.find(x=>x.id===id); if(!c) return;
+  c.status=status;
+  if(status==="Cleared"){
+    const signed=c.direction==="Received"?c.amount:-c.amount;
+    DB.accountTx.push({id:"TX"+Date.now(),date:new Date().toISOString().slice(0,10),account:c.account,type:"Cheque Clearance",amount:signed,note:`Cheque ${c.no} (${c.party}) cleared`,refId:c.id});
+  }
+  save(); render();
+}
+function addChequeModal(){
+  if(!canEdit('accounting')){ alert("This role cannot manage cheques."); return; }
+  openModal("New Cheque",`
+    <div class="row"><div><label>Cheque No.</label><input id="c_no"></div><div><label>Direction</label><select id="c_dir"><option>Received</option><option>Issued</option></select></div></div>
+    <label>Party</label><input id="c_pt" placeholder="Customer / Vendor / Landlord">
+    <div class="row"><div><label>Date</label><input id="c_dt" type="date" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Due Date</label><input id="c_dd" type="date"></div></div>
+    <div class="row"><div><label>Amount (AED)</label><input id="c_amt" type="number" value="1000"></div><div><label>Account</label><select id="c_ac">${DB.accounts.map(a=>`<option value="${a.id}">${a.name}</option>`).join("")}</select></div></div>
+    <label>Note</label><textarea id="c_note" rows="2"></textarea>
+  `,()=>{
+    const no=$("c_no").value.trim(), amt=+$("c_amt").value;
+    if(!no||amt<=0){ alert("Cheque number and a positive amount are required."); return false; }
+    DB.cheques.push({id:"CHQ"+Date.now(),no,date:$("c_dt").value,dueDate:$("c_dd").value,direction:$("c_dir").value,party:$("c_pt").value.trim(),amount:amt,account:$("c_ac").value,status:"Pending",note:$("c_note").value.trim()});
+    save(); render();
+  });
+}
+function exportCheques(){
+  const rows=DB.cheques.map(c=>[c.no,c.date,c.dueDate,c.direction,c.party,c.amount,(DB.accounts.find(a=>a.id===c.account)||{}).name||'',c.status,c.note||'']);
+  downloadText("digitalcoo-cheques.csv",toCsv([["No","Date","Due Date","Direction","Party","Amount","Account","Status","Note"],...rows]),"text/csv;charset=utf-8");
+}
+function viewCheques(){
+  const editable=canEdit('accounting');
+  const rows=[...(DB.cheques||[])].sort((a,b)=>(b.dueDate||"").localeCompare(a.dueDate||""));
+  const pendingReceived=rows.filter(c=>c.direction==="Received"&&(c.status==="Pending"||c.status==="Deposited")).reduce((s,c)=>s+c.amount,0);
+  const pendingIssued=rows.filter(c=>c.direction==="Issued"&&(c.status==="Pending"||c.status==="Deposited")).reduce((s,c)=>s+c.amount,0);
+  const bounced=rows.filter(c=>c.status==="Bounced").length;
+  const cols=["No","Date","Due Date","Direction","Party","Amount","Account","Status",null];
+  const body=rows.map(c=>{
+    const acc=(DB.accounts.find(a=>a.id===c.account)||{}).name||'-';
+    const terminal=c.status==="Cleared"||c.status==="Bounced";
+    let actions="";
+    if(editable&&!terminal){
+      actions=(c.status==="Pending"?`<button class="btn-ghost" onclick="chequeStatus('${c.id}','Deposited')">Mark Deposited</button> `:'')+
+        `<button class="btn-ghost" onclick="chequeStatus('${c.id}','Cleared')">Mark Cleared</button> <button class="btn-ghost" onclick="chequeStatus('${c.id}','Bounced')">Mark Bounced</button>`;
+    }
+    return `<tr><td>${c.no}</td><td>${c.date}</td><td>${c.dueDate}</td><td>${tag(c.direction)}</td><td>${c.party}</td><td>${AED(c.amount)}</td><td class="muted">${acc}</td><td>${tag(c.status)}</td><td style="white-space:nowrap">${actions}</td></tr>`;
+  }).join("");
+  return `<div class="kpis">
+      ${kpi("Pending Received",AED(pendingReceived),"var(--green)","Customer PDCs in hand")}
+      ${kpi("Pending Issued",AED(pendingIssued),"var(--amber)","Cheques we've written")}
+      ${kpi("Bounced",bounced,bounced?"var(--brand2)":"var(--green)","Needs follow-up")}
+      ${kpi("Total Cheques",rows.length,"var(--blue)","")}
+    </div>
+    <div class="card"><h3>Cheques (PDC) Management ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
+      <div class="toolbar">${editable?'<button class="btn-primary" onclick="addChequeModal()">+ New Cheque</button>':''}<button class="btn-ghost" onclick="exportCheques()">Export CSV</button></div>
+      <div class="scroll"><table><tr>${cols.map(c=>`<th>${c||''}</th>`).join("")}</tr>${colFilterRow(cols)}${body}</table></div>
+    </div>`;
+}
+let ACC_TAB="pl";
+function viewAccounting(){
+  if(ACC_TAB==='coa') return viewChartOfAccounts();
+  if(ACC_TAB==='cheques') return viewCheques();
+  return viewPL();
+}
+function viewPL(){
+  const inc=DB.invoices.filter(i=>i.type==="Commission Income");
+  const exp=DB.invoices.filter(i=>i.type==="Expense");
+  const revenue=inc.reduce((s,i)=>s+i.net,0);
+  const opex=exp.reduce((s,i)=>s+i.net,0);
+  const payroll=DB.employees.reduce((s,e)=>s+e.salary,0);
+  const commission=DB.orders.filter(o=>o.status==="Activated"||o.status==="Closed").reduce((s,o)=>s+o.commission,0);
+  const ebitda=revenue-opex-payroll-commission;
+  const ct = ebitda>0 ? Math.round(Math.max(0,ebitda-0)*0.09) : 0; // UAE CT 9% (simplified, ignoring 375k threshold for demo)
+  const net=ebitda-ct;
+  const outputVAT=inc.reduce((s,i)=>s+i.vat,0), inputVAT=exp.reduce((s,i)=>s+i.vat,0);
+
+  let inv=DB.invoices.map(i=>`<tr><td>${i.id}</td><td>${i.date}</td><td>${i.party}</td><td>${tag(i.type==='Expense'?'Expense':'Income')}</td><td>${AED(i.net)}</td><td>${AED(i.vat)}</td><td>${AED(i.total)}</td><td>${tag(i.status)}</td></tr>`).join("");
+
+  const pl=[
+    ["Revenue — e& Commission",revenue,"green"],
+    ["Sales Commission to staff",-commission,"red"],
+    ["Salaries & Wages",-payroll,"red"],
+    ["Operating Expenses",-opex,"red"],
+    ["EBITDA / Profit before tax",ebitda,"bold"],
+    ["UAE Corporate Tax (9%)",-ct,"red"],
+    ["Net Profit after tax",net,"bold"]
+  ].map(([l,v,c])=>`<tr style="${c==='bold'?'font-weight:800':''}"><td>${l}</td><td class="right" style="color:${c==='green'?'var(--green)':c==='red'?'var(--brand2)':'inherit'}">${v<0?'('+AED(-v)+')':AED(v)}</td></tr>`).join("");
+
+  return `<div class="kpis">
+      ${kpi("Revenue (period)",AED(revenue),"var(--green)","Commission income")}
+      ${kpi("Net Profit",AED(net),net>=0?"var(--green)":"var(--brand2)","After 9% CT")}
+      ${kpi("VAT Payable",AED(outputVAT-inputVAT),"var(--amber)","Output − Input")}
+      ${kpi("Outstanding AR",AED(inc.filter(i=>i.status==='Outstanding').reduce((s,i)=>s+i.total,0)),"var(--blue)","To collect from e&")}
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Profit & Loss (IFRS view)</h3><table>${pl}</table>
+        <p class="muted" style="font-size:11px;margin-top:8px">Demo: CT applied at 9% (real system applies AED 375k 0% threshold & adjustments).</p></div>
+      <div class="card"><h3>VAT Summary (FTA) <span class="badge">5%</span></h3>
+        <table><tr><td>Output VAT (sales)</td><td class="right">${AED(outputVAT)}</td></tr>
+        <tr><td>Input VAT (purchases)</td><td class="right">${AED(inputVAT)}</td></tr>
+        <tr style="font-weight:800"><td>Net VAT Payable</td><td class="right">${AED(outputVAT-inputVAT)}</td></tr></table>
+        <p class="muted" style="font-size:11px;margin-top:8px">Maps to FTA VAT201 return. EmaraTax-ready in full build.</p></div>
+    </div>
+    <div class="card"><h3>Invoices & Bills</h3>${(()=>{const cols=["Ref","Date","Party","Type","Net","VAT","Total","Status"];
+      return `<div class="scroll" style="max-height:34vh"><table><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr>${colFilterRow(cols)}${inv}</table></div>`;})()}</div>`;
+}
+
+/* ============================================================
+   AI REPORTS (daily / weekly / monthly)
+   ============================================================ */
+let AI_PERIOD="daily";
+function viewAI(){
+  return `<div class="toolbar"><div class="seg">
+      <button class="${AI_PERIOD==='daily'?'on':''}" onclick="AI_PERIOD='daily';render()">Daily</button>
+      <button class="${AI_PERIOD==='weekly'?'on':''}" onclick="AI_PERIOD='weekly';render()">Weekly</button>
+      <button class="${AI_PERIOD==='monthly'?'on':''}" onclick="AI_PERIOD='monthly';render()">Monthly</button>
+    </div><button class="btn-ghost" onclick="downloadAIReport()">Download report</button><span class="muted">Auto-generated for ${SESSION.name} (${ROLES[SESSION.role].name})</span></div>
+    ${aiReport(AI_PERIOD)}`;
+}
+function aiReport(period){
+  const ags=visibleAgents();
+  const dsr=DB.dsr.filter(recVisible);
+  const ord=DB.orders.filter(recVisible);
+  const pipe=DB.pipeline.filter(recVisible);
+  const calls=dsr.length, conn=dsr.filter(d=>d.connected==="YES").length;
+  const connRate=calls?Math.round(conn/calls*100):0;
+  const act=ord.filter(o=>o.status==="Activated"||o.status==="Closed");
+  const actMRC=act.reduce((s,o)=>s+o.mrc,0);
+  const subMRC=ord.reduce((s,o)=>s+o.mrc,0);
+  const comm=act.reduce((s,o)=>s+o.commission,0);
+  const target=DB.employees.filter(e=>ags.includes(e.name)).reduce((s,e)=>s+e.target,0);
+  const achP=target?Math.round(actMRC/target*100):0;
+  const onHold=ord.filter(o=>o.status==="On Hold").length;
+  const inproc=ord.filter(o=>o.status==="E& In-process"||o.status==="Submitted").length;
+  const lost=pipe.filter(p=>p.stage.includes("Lost")).length;
+  // top + bottom agent
+  const board=ags.map(a=>({a,v:DB.orders.filter(o=>o.agent===a&&(o.status==="Activated"||o.status==="Closed")).reduce((s,o)=>s+o.mrc,0)})).sort((x,y)=>y.v-x.v);
+  const top=board[0], low=board[board.length-1];
+  const today=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+
+  let flags="";
+  flags+=`<div class="flag ${connRate>=50?'good':'warn'}">Connect rate ${connRate}% on ${calls} calls. ${connRate<50?'Below 50% — review calling list quality & timing.':'Healthy.'}</div>`;
+  flags+=`<div class="flag ${achP>=80?'good':achP>=50?'warn':'bad'}">Target achievement ${achP}% (${AED(actMRC)} of ${AED(target)}).</div>`;
+  if(inproc) flags+=`<div class="flag warn">${inproc} orders stuck at e&/submission — chase activation to convert ${AED(ord.filter(o=>o.status==="E& In-process"||o.status==="Submitted").reduce((s,o)=>s+o.mrc,0))} pending MRC.</div>`;
+  if(onHold) flags+=`<div class="flag warn">${onHold} orders On Hold — likely missing KYC/documents. Back office action needed.</div>`;
+  if(lost) flags+=`<div class="flag bad">${lost} opportunities marked Lost — competitor (Du/Etisalat) retention is the usual cause.</div>`;
+
+  const recs={
+    daily:["Chase the "+inproc+" submitted/in-process orders with back office before 12:00.","Re-call all 'FollowUp' leads from yesterday while intent is warm.","Lowest connect agent: coach "+low.a+" on call timing."],
+    weekly:["Reallocate fresh leads toward "+top.a+" (highest conversion this period).","Run a documentation clinic to clear On-Hold orders.","Review Negotiation-stage deals with Director for the biggest MRC."],
+    monthly:["Forecast next month from weighted pipeline ("+AED(pipe.reduce((s,p)=>s+p.mrc,0))+" open MRC).","Set commission accrual of "+AED(comm)+" for finance.","Compare activation rate vs target; adjust headcount/targets for "+(achP<70?'under':'over')+"-performance."]
+  };
+
+  return `<div class="report">
+    <h2>${period[0].toUpperCase()+period.slice(1)} ${period==='daily'?'Briefing':'Report'} — Digitalcoo e& Channel</h2>
+    <div class="meta">${today} · Scope: ${ags.length} agent(s) · Prepared by AI Advisor for ${SESSION.name}</div>
+    <b>Summary.</b> ${calls} calls logged (${connRate}% connected). Submitted MRC ${AED(subMRC)}, activated ${AED(actMRC)} → ${achP}% of target. Commission earned ${AED(comm)}. Open pipeline ${pipe.length} deals worth ${AED(pipe.reduce((s,p)=>s+p.mrc,0))} MRC.
+    <h3 style="font-size:13px;margin:14px 0 4px">Signals</h3>${flags}
+    <h3 style="font-size:13px;margin:14px 0 4px">Recommended actions</h3><ul>${recs[period].map(r=>`<li>${r}</li>`).join("")}</ul>
+    <div class="flag good">★ Top performer: <b>${top.a}</b> (${AED(top.v)} activated). Recognise in team huddle.</div>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:10px">In the live system this is emailed/WhatsApp'd to you automatically — daily 8am, weekly Monday, monthly on the 1st — and tuned to each role.</p>`;
+}
+
+/* ============================================================
+   ADMIN / SETTINGS (extensibility)
+   ============================================================ */
+function viewAdminRoles(){
+  const editable=canEdit('admin');
+  const roles=Object.keys(ROLES);
+  const mods=Object.keys(NAVDEF);
+  let head=`<tr><th>Role \\ Module</th>${mods.map(m=>`<th style="text-transform:none">${NAVDEF[m].t}</th>`).join("")}</tr>`;
+  let rows=roles.map(r=>`<tr><td><b>${ROLES[r].name}</b></td>${mods.map(m=>{
+      const on=(DB.access[r]||[]).includes(m);
+      return `<td style="text-align:center">${tgl(on,!editable,`toggleAccess('${r}','${m}',this.checked)`)}</td>`;
+    }).join("")}</tr>`).join("");
+  let ehead=`<tr><th>Role \\ Module</th>${EDIT_MODS.map(m=>`<th style="text-transform:none">${NAVDEF[m].t}</th>`).join("")}</tr>`;
+  let erows=roles.map(r=>`<tr><td><b>${ROLES[r].name}</b></td>${EDIT_MODS.map(m=>{
+      const on=(DB.editAccess[r]||[]).includes(m);
+      return `<td style="text-align:center">${tgl(on,!editable,`toggleEdit('${r}','${m}',this.checked)`)}</td>`;
+    }).join("")}</tr>`).join("");
+  return `<div class="card"><h3>View Access by Role ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
+      <div class="scroll" style="max-height:none"><table>${head}${rows}</table></div>
+      <p class="muted" style="font-size:12px;margin-top:8px">Controls what each role can <b>see</b> in the sidebar — this is the default for everyone in that role. To customize one specific person, use <b>People</b>.</p></div>
+    <div class="card"><h3>Edit/Create Access by Role ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
+      <div class="scroll" style="max-height:none"><table>${ehead}${erows}</table></div>
+      <p class="muted" style="font-size:12px;margin-top:8px">Controls what each role can <b>change</b> — independent of View access above.</p></div>`;
+}
+function viewAdminPeople(){
+  const editable=canEdit('admin');
+  const options=DB.employees.map(e=>`<option value="${e.id}" ${ADMIN_PICK===e.id?'selected':''}>${e.name} — ${ROLES[e.role].name}</option>`).join("");
+  const picker=`<div class="card"><h3>People</h3>
+    <label>Search / select a person</label><select onchange="ADMIN_PICK=this.value;render();"><option value="">— choose a person —</option>${options}</select></div>`;
+  if(!ADMIN_PICK) return picker+`<p class="muted" style="padding:0 4px">Pick a person above to view or override their individual View/Edit permissions.</p>`;
+  const e=DB.employees.find(x=>x.id===ADMIN_PICK);
+  if(!e){ ADMIN_PICK=null; return picker; }
+  const overridden=DB.userAccess[e.id]!==undefined||DB.userEditAccess[e.id]!==undefined;
+  const viewList=DB.userAccess[e.id]!==undefined?DB.userAccess[e.id]:(DB.access[e.role]||[]);
+  const editList=DB.userEditAccess[e.id]!==undefined?DB.userEditAccess[e.id]:(DB.editAccess[e.role]||[]);
+  const rows=Object.keys(NAVDEF).map(m=>{
+    const hasEdit=EDIT_MODS.includes(m);
+    return `<tr><td>${NAVDEF[m].t}</td>
+      <td style="text-align:center">${tgl(viewList.includes(m),!editable,`toggleUserAccess('${e.id}','${m}',this.checked)`)}</td>
+      <td style="text-align:center">${hasEdit?tgl(editList.includes(m),!editable,`toggleUserEdit('${e.id}','${m}',this.checked)`):'<span class="muted">—</span>'}</td>
+    </tr>`;
+  }).join("");
+  return picker+`<div class="card"><h3>${e.name} <span class="muted" style="font-weight:400">(${ROLES[e.role].name})</span> ${overridden?'<span class="badge" style="background:var(--amber)">CUSTOM OVERRIDE</span>':'<span class="badge">ROLE DEFAULT</span>'}</h3>
+    <p class="muted" style="font-size:12px;margin-top:0">Toggling any switch below gives ${e.name} their own independent permissions, separate from every other ${ROLES[e.role].name}.</p>
+    ${editable&&overridden?`<button class="btn-ghost" onclick="resetUserOverride('${e.id}')" style="margin-bottom:10px">↺ Reset to role default</button>`:''}
+    <table><tr><th>Module</th><th>View</th><th>Edit/Create</th></tr>${rows}</table></div>`;
+}
+function viewAdminUsers(){
+  const editable=canEdit('admin');
+  const rows=DB.employees.map(e=>`<tr><td>${e.name}</td><td>${ROLES[e.role].name}</td><td><b style="color:var(--brand2)">${e.username||''}</b></td>
+    <td>${editable?`<button class="btn-ghost" onclick="resetPasswordModal('${e.id}')">Change Password</button>`:''}</td></tr>`).join("");
+  return `<div class="card"><h3>Users <span class="badge">ADMIN</span></h3>
+    <p class="muted" style="font-size:12px;margin-top:0">Each employee signs in with their own username. Passwords are never shown to anyone — use Change Password to set a new one.</p>
+    <div class="scroll" style="max-height:60vh"><table><tr><th>Name</th><th>Role</th><th>Username</th><th></th></tr>${rows}</table></div></div>`;
+}
+function viewAdminProducts(){
+  const editable=canEdit('admin');
+  let prodRows=DB.products.map(p=>`<tr><td>${p.cat}</td><td>${p.title}</td><td>${AED(p.mrc)}</td>${editable?`<td style="white-space:nowrap"><button class="btn-ghost" onclick="editProduct('${p.id}')">Edit</button> <button class="btn-ghost" onclick="deleteProduct('${p.id}')">Delete</button></td>`:''}</tr>`).join("");
+  return `<div class="card"><h3>Products / Plans ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
+      <div class="toolbar">${editable?'<button class="btn-primary" onclick="addProductModal()">+ Add Product</button>':''}<span class="muted">Define product, category &amp; default MRC — these feed the Pipeline product dropdown (auto-fills category &amp; MRC).</span></div>
+      <table><tr><th>Category</th><th>Product / Plan</th><th>Default MRC</th>${editable?'<th></th>':''}</tr>${prodRows}</table>
+    </div>
+    <div class="card"><h3>Pipeline Stages</h3><table>${PIPE_STAGES.map(s=>`<tr><td>${tag(s)}</td></tr>`).join("")}</table></div>
+    <div class="card"><h3>Extensibility — beyond e& <span class="badge">KEY</span></h3>
+      <p>The same engine is not limited to e&. Add a new <b>segment / business unit</b> (Delivery Riders, Limousine, Auto Repair, another Telecom brand) with its own products, stages, targets and team — dashboards, MIS, payroll and accounting roll up automatically at <b>King Group level</b>.</p>
+      <div class="row"><div><label>New Segment Name</label><input id="seg_nm" placeholder="e.g. Du Reseller / Limousine"></div>
+      <div style="flex:0"><label>&nbsp;</label><button class="btn-primary" onclick="alert('Demo: new segment scaffolded with its own pipeline, targets, team and reports — group dashboards include it automatically.')">+ Add Segment</button></div></div>
+    </div>`;
+}
+function viewAdmin(){
+  if(ADMIN_SUB==="people") return viewAdminPeople();
+  if(ADMIN_SUB==="users") return viewAdminUsers();
+  if(ADMIN_SUB==="products") return viewAdminProducts();
+  return viewAdminRoles();
+}
+function toggleAccess(role,mod,on){
+  const a=DB.access[role]||(DB.access[role]=[]); const i=a.indexOf(mod);
+  if(on&&i<0)a.push(mod); if(!on&&i>=0)a.splice(i,1);
+  save(); if(role===SESSION.role) renderNav(); render();
+}
+function toggleEdit(role,mod,on){
+  const a=DB.editAccess[role]||(DB.editAccess[role]=[]); const i=a.indexOf(mod);
+  if(on&&i<0)a.push(mod); if(!on&&i>=0)a.splice(i,1);
+  save(); render();
+}
+// Shared password-change modal — the current password is never read back or displayed,
+// only ever overwritten. Used from Admin > Users and from the Employee Profile page.
+function resetPasswordModal(empId){
+  const e=DB.employees.find(x=>x.id===empId); if(!e) return;
+  openModal(`Change Password — ${e.name}`,`
+    <p class="muted" style="margin-top:0;font-size:12px">For security, the current password is never shown — enter a new one below.</p>
+    <label>New Password</label><input id="pw_new" type="password" placeholder="New password">
+    <label>Confirm Password</label><input id="pw_conf" type="password" placeholder="Confirm new password">
+  `,()=>{
+    const p1=$("pw_new").value, p2=$("pw_conf").value;
+    if(!p1||p1.length<4){ alert("Password must be at least 4 characters."); return false; }
+    if(p1!==p2){ alert("Passwords do not match."); return false; }
+    e.password=p1; save(); toast(`Password changed for ${e.name}.`);
+  });
+}
+function myProfileModal(){
+  const e=sessionEmp(); if(!e) return;
+  openModal(`My Profile — ${e.name}`,`
+    <table><tr><td class="muted">Name</td><td><b>${e.name}</b></td></tr>
+    <tr><td class="muted">Role</td><td>${ROLES[e.role].name}</td></tr>
+    <tr><td class="muted">Username</td><td>${e.username||''}</td></tr></table>
+    <div class="nav-sec" style="margin-left:0">Change Password</div>
+    <p class="muted" style="margin-top:0;font-size:12px">For security, your current password is never shown — enter a new one below.</p>
+    <label>New Password</label><input id="pw_new" type="password" placeholder="New password">
+    <label>Confirm Password</label><input id="pw_conf" type="password" placeholder="Confirm new password">
+  `,()=>{
+    const p1=$("pw_new").value, p2=$("pw_conf").value;
+    if(!p1&&!p2) return; // no change requested, just close
+    if(!p1||p1.length<4){ alert("Password must be at least 4 characters."); return false; }
+    if(p1!==p2){ alert("Passwords do not match."); return false; }
+    e.password=p1; save(); toast("Your password has been changed.");
+  });
+}
+function addProductModal(){
+  openModal("Add Product",`
+    <label>Product / Plan name</label><input id="pr_t" placeholder="e.g. Business Pro2">
+    <div class="row"><div><label>Category</label><input id="pr_c" placeholder="e.g. Fixed / GSM (Mobile)"></div>
+    <div><label>Default MRC (AED)</label><input id="pr_m" type="number" value="0"></div></div>
+  `,()=>{ if(!$("pr_t").value)return; DB.products.push({id:"PR"+Date.now(),title:$("pr_t").value,cat:$("pr_c").value||"General",mrc:+$("pr_m").value}); save(); render(); });
+}
+function editProduct(id){
+  const p=DB.products.find(x=>x.id===id); if(!p)return;
+  openModal("Edit Product",`
+    <label>Product / Plan name</label><input id="pr_t" value="${p.title}">
+    <div class="row"><div><label>Category</label><input id="pr_c" value="${p.cat}"></div>
+    <div><label>Default MRC (AED)</label><input id="pr_m" type="number" value="${p.mrc}"></div></div>
+  `,()=>{ p.title=$("pr_t").value;p.cat=$("pr_c").value;p.mrc=+$("pr_m").value; save(); render(); });
+}
+function deleteProduct(id){ if(confirm("Delete this product?")){ DB.products=DB.products.filter(x=>x.id!==id); save(); render(); } }
+
+/* ============================================================
+   SHARED: permissions, modal, filter, init
+   ============================================================ */
+function openModal(title,bodyHTML,onSave,extraBtn=""){
+  $("modalHost").innerHTML=`<div class="modal" onclick="if(event.target===this)closeModal()"><div class="box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="margin:0">${title}</h3><button class="btn-ghost" onclick="closeModal()">✕</button></div>
+    ${bodyHTML}
+    <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">${extraBtn}<button class="btn-ghost" onclick="closeModal()">Cancel</button><button class="btn-primary" id="mSave">Save</button></div>
+  </div></div>`;
+  $("mSave").onclick=()=>{ const ok=onSave(); if(ok!==false) closeModal(); };
+  enhanceSelects($("modalHost"));
+}
+function openModalInfo(title,bodyHTML){
+  $("modalHost").innerHTML=`<div class="modal" onclick="if(event.target===this)closeModal()"><div class="box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="margin:0">${title}</h3><button class="btn-ghost" onclick="closeModal()">✕</button></div>
+    ${bodyHTML}
+    <div style="display:flex;justify-content:flex-end;margin-top:18px"><button class="btn-primary" onclick="closeModal()">Close</button></div>
+  </div></div>`;
+  enhanceSelects($("modalHost"));
+}
+function closeModal(){ $("modalHost").innerHTML=""; }
+// Turn every native <select> into a searchable dropdown (keeps the underlying select so all value/dataset reads still work)
+function enhanceSelects(root){
+  if(!root||!root.querySelectorAll) return;
+  root.querySelectorAll("select:not([data-enh])").forEach(sel=>{
+    sel.setAttribute("data-enh","1"); sel.style.display="none";
+    const wrap=document.createElement("div"); wrap.className="ssel";
+    const inp=document.createElement("input"); inp.className="ssel-inp"; inp.placeholder="Search…";
+    const cur=sel.options[sel.selectedIndex]; inp.value=cur?cur.textContent:""; inp.dataset.committed=inp.value;
+    sel.parentNode.insertBefore(wrap,sel); wrap.appendChild(inp); wrap.appendChild(sel);
+    let listEl=null;
+    function close(){ if(listEl){listEl.remove(); listEl=null;} document.removeEventListener("mousedown",outside,true); window.removeEventListener("scroll",onScroll,true); }
+    function outside(e){ if(!wrap.contains(e.target)&&(!listEl||!listEl.contains(e.target))){ inp.value=inp.dataset.committed; close(); } }
+    function onScroll(e){ if(listEl&&(listEl===e.target||listEl.contains(e.target))) return; close(); }
+    function draw(q){ q=(q||"").toLowerCase(); listEl.innerHTML="";
+      [...sel.options].forEach((o,i)=>{ if(o.textContent.toLowerCase().includes(q)){
+        const it=document.createElement("div"); it.className="ssel-it"+(i===sel.selectedIndex?" on":""); it.textContent=o.textContent;
+        it.onmousedown=(e)=>{ e.preventDefault(); sel.selectedIndex=i; inp.value=o.textContent; inp.dataset.committed=o.textContent; close(); sel.dispatchEvent(new Event("change",{bubbles:true})); };
+        listEl.appendChild(it); } });
+      if(!listEl.children.length){ const it=document.createElement("div"); it.className="ssel-it muted"; it.textContent="No match"; listEl.appendChild(it); }
+    }
+    function open(){ close(); const r=inp.getBoundingClientRect(); listEl=document.createElement("div"); listEl.className="ssel-list";
+      listEl.style.left=r.left+"px"; listEl.style.top=(r.bottom+2)+"px"; listEl.style.width=r.width+"px"; document.body.appendChild(listEl); draw("");
+      document.addEventListener("mousedown",outside,true); window.addEventListener("scroll",onScroll,true); }
+    inp.onfocus=()=>{ inp.value=""; open(); };
+    inp.oninput=()=>{ if(listEl) draw(inp.value); else open(); };
+    inp.onkeydown=(e)=>{ if(e.key==="Escape"){ inp.value=inp.dataset.committed; close(); } };
+  });
+}
+function filterTable(id,q){
+  q=q.toLowerCase();
+  document.querySelectorAll("#"+id+" tr").forEach((tr,i)=>{ if(i===0||tr.classList.contains("frow")||tr.classList.contains("fkeep"))return; tr.style.display=tr.textContent.toLowerCase().includes(q)?"":"none"; });
+}
+// Per-column search: a filter row of inputs, each filtering only its own column
+function colFilterRow(cols,opts){
+  opts=opts||{};
+  return `<tr class="frow">${cols.map((c,i)=>{
+    if(c===null) return '<th></th>';
+    if(opts[c]) return `<th><select class="colf" data-c="${i}" onchange="colSearch(this)"><option value="">All</option>${opts[c].map(o=>`<option value="${o}">${o}</option>`).join("")}</select></th>`;
+    return `<th><input class="colf" placeholder="search ${String(c).replace(/[^A-Za-z ].*/,'').trim()||'…'}" data-c="${i}" oninput="colSearch(this)"></th>`;
+  }).join("")}</tr>`;
+}
+function colSearch(inp){
+  const table=inp.closest("table");
+  const filters=[...table.querySelectorAll("tr.frow .colf")].map(x=>({c:+x.dataset.c,v:(x.value||"").trim().toLowerCase()})).filter(f=>f.v);
+  [...table.querySelectorAll("tr")].forEach((tr,idx)=>{
+    if(idx===0||tr.classList.contains("frow")||tr.classList.contains("fkeep"))return;
+    const cells=tr.children; let show=true;
+    for(const f of filters){ const cell=cells[f.c]; if(!cell||!cell.textContent.toLowerCase().includes(f.v)){show=false;break;} }
+    tr.style.display=show?"":"none";
+  });
+}
+
+/* ---------- init ---------- */
+renderLogin();
+</script>
+</body>
+</html>
