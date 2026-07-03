@@ -1,0 +1,3 @@
+git add .nojekyll
+git commit -m "fix: add nojekyll and force rebuild"
+git push origin master
