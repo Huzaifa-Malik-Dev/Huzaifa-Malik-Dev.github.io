@@ -44,8 +44,20 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .role-btn small{color:var(--muted);font-size:11px}
 
 /* App shell */
-#app{display:none;grid-template-columns:230px 1fr;min-height:100vh}
+#app{display:none;grid-template-columns:230px 1fr;min-height:100vh;transition:grid-template-columns .15s}
+#app.nav-collapsed{grid-template-columns:1fr}
+#app.nav-collapsed .side{display:none}
 .side{background:var(--panel);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column}
+.hamburger{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:8px 11px;font-size:15px;cursor:pointer;margin-right:4px}
+.hamburger:hover{border-color:var(--brand2)}
+.sidebackdrop{display:none;position:fixed;inset:0;background:rgba(5,8,15,.55);z-index:65}
+@media (max-width:860px){
+  #app{grid-template-columns:1fr}
+  #app .side{position:fixed;top:0;left:0;height:100vh;width:230px;z-index:70;transform:translateX(-100%);transition:transform .2s ease;display:flex}
+  #app:not(.nav-collapsed) .side{transform:translateX(0)}
+  #app:not(.nav-collapsed) .sidebackdrop{display:block}
+  .main{padding:16px}
+}
 .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;color:var(--muted);font-weight:600;cursor:pointer;margin-bottom:2px}
 .nav-item:hover{background:var(--panel2);color:var(--txt)}
 .nav-item.active{background:var(--brand);color:#fff}
@@ -165,7 +177,7 @@ input.colf::placeholder{color:#5c6c8c}
 .empty{padding:26px;text-align:center;color:var(--muted)}
 .ssel{position:relative}
 .ssel-inp{width:100%;background-image:none}
-.ssel-list{position:fixed;z-index:90;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,.55);max-height:230px;overflow:auto}
+.ssel-list{position:fixed;z-index:90;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,.55);max-height:230px;overflow:auto;overscroll-behavior:contain}
 .ssel-it{padding:8px 11px;font-size:13px;cursor:pointer;color:var(--txt)}
 .ssel-it:hover,.ssel-it.on{background:var(--panel2)}
 .ssel-it.muted{color:var(--muted);cursor:default}
@@ -188,6 +200,7 @@ input.colf::placeholder{color:#5c6c8c}
 
 <!-- ===================== APP ===================== -->
 <div id="app">
+  <div class="sidebackdrop" onclick="toggleSidebar()"></div>
   <aside class="side">
     <div class="logo" style="font-size:18px;padding:6px 8px 14px">Digi<span>coo</span> CRM</div>
     <div id="nav"></div>
@@ -200,7 +213,7 @@ input.colf::placeholder{color:#5c6c8c}
   </aside>
   <main class="main">
     <div class="topbar">
-      <div style="display:flex;align-items:center;gap:16px"><h1 id="pageTitle">Dashboard</h1><div id="agentFilter"></div></div>
+      <div style="display:flex;align-items:center;gap:16px"><button class="hamburger" onclick="toggleSidebar()" title="Toggle menu">☰</button><h1 id="pageTitle">Dashboard</h1><div id="agentFilter"></div></div>
       <div class="who">
         <button class="bell" onclick="toggleNotif(event)" title="Notifications">🔔<span id="bellCount" class="bellbadge hidden">0</span></button>
         <div class="right" style="cursor:pointer" onclick="myProfileModal()" title="My Profile"><div id="whoName" style="font-weight:700"></div><div class="muted" id="whoRole" style="font-size:12px"></div></div>
@@ -519,6 +532,7 @@ let ADMIN_PICK=null;
 let DSR_PAGE=null;
 let DEAL_PAGE=null;
 let ORDER_PAGE=null;
+let SIDEBAR_OPEN=true;
 
 /* ============================================================
    LIVE SYNC + NOTIFICATIONS
@@ -662,10 +676,14 @@ function loginSubmit(){
 }
 const ROLE_COLOR={agent:"#3b82f6",team_leader:"#22c55e",teams_head:"#8b5cf6",sales_head:"#f59e0b",backoffice:"#06b6d4",accountant:"#14b8a6",hr:"#ec4899",admin:"#94a3b8"};
 function roleColor(r){ return ROLE_COLOR[r]||"var(--brand)"; }
+function toggleSidebar(){ SIDEBAR_OPEN=!SIDEBAR_OPEN; applySidebarState(); }
+function applySidebarState(){ const el=$("app"); if(el) el.classList.toggle("nav-collapsed", !SIDEBAR_OPEN); }
+function closeSidebarOnMobile(){ if(window.innerWidth<=860 && SIDEBAR_OPEN){ SIDEBAR_OPEN=false; applySidebarState(); } }
 function doLogin(role,name){
   SESSION={role,name};
   $("login").style.display="none";
   $("app").style.display="grid";
+  SIDEBAR_OPEN=window.innerWidth>860; applySidebarState();
   document.documentElement.style.setProperty("--role", roleColor(role));
   $("whoName").textContent=name;
   const wr=$("whoRole"); wr.textContent=ROLES[role].name; wr.className="rolepill";
@@ -686,12 +704,15 @@ function currentSubOf(mod){
   if(mod==="admin") return ADMIN_SUB;
   return null;
 }
+function visibleSubs(list,mod,d){ return (d.subs||[]).filter(s=>subGranted(list,mod,s.key)); }
 function renderNav(){
   const nav=$("nav"); nav.innerHTML="";
   const list=myAccessList();
-  Object.keys(NAVDEF).filter(k=>list.includes(k)).forEach(k=>{
+  Object.keys(NAVDEF).filter(k=>moduleGranted(list,k)).forEach(k=>{
     const d=NAVDEF[k];
     if(d.subs){
+      const subs=visibleSubs(list,k,d);
+      if(!subs.length) return;
       const open=!!NAV_OPEN[k];
       const grp=document.createElement("div");
       grp.className="nav-item"+(k===CURRENT?" current-group":"");
@@ -701,7 +722,7 @@ function renderNav(){
       const sub=currentSubOf(k);
       const subsWrap=document.createElement("div");
       subsWrap.className=open?"":"hidden";
-      d.subs.forEach(s=>{
+      subs.forEach(s=>{
         const el=document.createElement("div");
         el.className="nav-item nav-sub"+(k===CURRENT&&sub===s.key?" active":"");
         el.textContent=s.t;
@@ -739,8 +760,23 @@ function render(){
 function sessionEmp(){ return SESSION && DB.employees.find(e=>e.name===SESSION.name); }
 function myAccessList(){ const emp=sessionEmp(); return (emp && DB.userAccess[emp.id]!==undefined) ? DB.userAccess[emp.id] : (DB.access[SESSION.role]||[]); }
 function myEditList(){ const emp=sessionEmp(); return (emp && DB.userEditAccess[emp.id]!==undefined) ? DB.userEditAccess[emp.id] : (DB.editAccess[SESSION.role]||[]); }
-function canView(mod){ return !!SESSION && myAccessList().includes(mod); }
-function canEdit(mod){ return !!SESSION && myEditList().includes(mod); }
+// A bare module key ("hr") in a permission list means "this module and every subsection under
+// it" — so existing role defaults keep working unchanged. A compound key ("hr.passport") grants
+// just that one subsection. moduleGranted = "does this module show in the sidebar at all";
+// subGranted = "can they see/use this one specific subsection".
+function moduleGranted(list,mod){ return list.includes(mod) || list.some(k=>k.startsWith(mod+'.')); }
+function subGranted(list,mod,sub){ return list.includes(mod) || list.includes(mod+'.'+sub); }
+function canView(mod){ return !!SESSION && moduleGranted(myAccessList(),mod); }
+function canViewSub(mod,sub){ return !!SESSION && subGranted(myAccessList(),mod,sub); }
+function canEdit(mod){ return !!SESSION && moduleGranted(myEditList(),mod); }
+function canEditSub(mod,sub){ return !!SESSION && subGranted(myEditList(),mod,sub); }
+// Granting Edit on something must also grant View on that same thing — you can't sensibly edit
+// what you can't see. One-directional only: turning Edit or View off doesn't retract anything else.
+function grantViewIfMissing(viewArr,key){
+  if(viewArr.includes(key)) return;
+  if(key.includes('.') && viewArr.includes(key.split('.')[0])) return;
+  viewArr.push(key);
+}
 function toggleUserAccess(empId,mod,on){
   const e=DB.employees.find(x=>x.id===empId); if(!e) return;
   if(DB.userAccess[empId]===undefined) DB.userAccess[empId]=JSON.parse(JSON.stringify(DB.access[e.role]||[]));
@@ -754,6 +790,10 @@ function toggleUserEdit(empId,mod,on){
   if(DB.userEditAccess[empId]===undefined) DB.userEditAccess[empId]=JSON.parse(JSON.stringify(DB.editAccess[e.role]||[]));
   const a=DB.userEditAccess[empId]; const i=a.indexOf(mod);
   if(on&&i<0)a.push(mod); if(!on&&i>=0)a.splice(i,1);
+  if(on){
+    if(DB.userAccess[empId]===undefined) DB.userAccess[empId]=JSON.parse(JSON.stringify(DB.access[e.role]||[]));
+    grantViewIfMissing(DB.userAccess[empId],mod);
+  }
   save(); render();
 }
 function resetUserOverride(empId){
@@ -765,17 +805,24 @@ function go(mod){
   if(!canView(mod)){ toast("This role does not have access to "+(NAVDEF[mod]?NAVDEF[mod].t:mod)); return; }
   const d=NAVDEF[mod];
   if(d.subs){ goSub(mod,currentSubOf(mod)||d.subs[0].key); return; }
-  CURRENT=mod; if(mod==="dsr") DATE_FILTER="all"; renderNav(); render();
+  CURRENT=mod; if(mod==="dsr") DATE_FILTER="all"; renderNav(); render(); closeSidebarOnMobile();
 }
 function goSub(mod,subKey){
   if(!canView(mod)){ toast("This role does not have access to "+(NAVDEF[mod]?NAVDEF[mod].t:mod)); return; }
+  const d=NAVDEF[mod];
+  if(!canViewSub(mod,subKey)){
+    const first=visibleSubs(myAccessList(),mod,d)[0];
+    if(!first){ toast("This role does not have access to any part of "+d.t); return; }
+    subKey=first.key;
+  }
   CURRENT=mod;
   if(mod==="hr"){ HR_SUB=subKey; EMP_PAGE=null; }
   else if(mod==="payroll"){ PAY_TAB=subKey; }
   else if(mod==="accounting"){ ACC_TAB=subKey; }
   else if(mod==="admin"){ ADMIN_SUB=subKey; }
+  Object.keys(NAV_OPEN).forEach(k=>{ if(k!==mod) NAV_OPEN[k]=false; });
   NAV_OPEN[mod]=true;
-  renderNav(); render();
+  renderNav(); render(); closeSidebarOnMobile();
 }
 function toggleNavGroup(mod){
   if(!canView(mod)){ toast("This role does not have access to "+(NAVDEF[mod]?NAVDEF[mod].t:mod)); return; }
@@ -1544,7 +1591,7 @@ function hrRow(e){
     <td>${e.id}</td><td>${e.name}${dot}${e.active===false?' <span class="tag" style="background:var(--brand2)22;color:var(--brand2)">Inactive</span>':''}</td><td>${e.desig}</td><td><span class="tag" style="background:#3b82f622;color:var(--blue)">${ROLES[e.role].name}</span></td>
     <td>${e.dept}</td><td>${e.tl}</td><td>${e.join}</td><td>${e.salary?AED(e.salary):'-'}</td>
     <td>${docHealthBadge(e)}</td>
-    <td class="muted">${canEdit('hr')?'Edit ›':'View ›'}</td></tr>`;
+    <td class="muted">${canEditSub('hr',HR_SUB)?'Edit ›':'View ›'}</td></tr>`;
 }
 function viewHRList(list,subtitle){
   const body=list.map(hrRow).join("");
@@ -1553,7 +1600,7 @@ function viewHRList(list,subtitle){
   const flagged=DB.employees.filter(e=>docHealth(e).level!=="good").length;
   return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <span class="muted">${subtitle}</span>
-      ${canEdit('hr')?'<button class="btn-primary" onclick="addEmpModal()">+ Add Employee / User</button>':''}
+      ${canEditSub('hr',HR_SUB)?'<button class="btn-primary" onclick="addEmpModal()">+ Add Employee / User</button>':''}
     </div>
     <div class="kpis">
       ${kpi("Head Count",heads,"var(--blue)",sales+" in e& Sales")}
@@ -1575,7 +1622,7 @@ function viewHRPassport(){
     const status=!exp?{l:"warn",t:"Missing"}:exp<today?{l:"bad",t:"Expired"}:exp<=in30?{l:"warn",t:"Expiring soon"}:{l:"good",t:"Valid"};
     const c=status.l==="bad"?"var(--brand2)":status.l==="warn"?"var(--amber)":"var(--green)";
     return `<tr style="cursor:pointer" onclick="EMP_PAGE='${e.id}';render();"><td>${e.id}</td><td>${e.name}</td><td>${e.passportNo||'-'}</td><td>${exp||'-'}</td><td><span class="tag" style="background:${c}22;color:${c}">${status.t}</span></td>
-      <td class="muted">${canEdit('hr')?'Edit ›':'View ›'}</td></tr>`;
+      <td class="muted">${canEditSub('hr',HR_SUB)?'Edit ›':'View ›'}</td></tr>`;
   }).join("");
   const cols=["ID","Name","Passport No.","Expiry","Status",null];
   return `<div class="kpis">
@@ -1587,7 +1634,7 @@ function viewHRPassport(){
     <div class="scroll"><table><tr>${cols.map(c=>`<th>${c||''}</th>`).join("")}</tr>${colFilterRow(cols)}${body}</table></div></div>`;
 }
 function assignCard(){
-  const edit=canEdit('hr');
+  const edit=canEditSub('hr',HR_SUB);
   const tls=DB.employees.filter(e=>e.role==="team_leader");
   const agents=DB.employees.filter(e=>e.role==="agent");
   const rows=agents.map(a=>{
@@ -1604,7 +1651,7 @@ function assignCard(){
     <table><tr><th>Agent</th><th>Current Team Leader</th>${edit?'<th>Reassign</th>':''}</tr>${rows}</table></div>`;
 }
 function reassignAgent(empId,newTL){
-  if(!canEdit('hr')||!newTL) return;
+  if(!canEditSub('hr',HR_SUB)||!newTL) return;
   const e=DB.employees.find(x=>x.id===empId); if(!e)return;
   const old=e.tl;
   e.tl=newTL; e.reportsTo=(newTL==="-")?"-":newTL;
@@ -1620,7 +1667,7 @@ let PENDING_EMP_DOCS={};
 function viewEmployeeProfile(id){
   const e=DB.employees.find(x=>x.id===id);
   if(!e){ EMP_PAGE=null; return viewHR(); }
-  const editable=canEdit('hr');
+  const editable=canEditSub('hr',HR_SUB);
   PENDING_EMP_DOCS={};
   const h=docHealth(e);
   const backBtn=`<button class="btn-ghost" onclick="EMP_PAGE=null;render();">← Back to Employees</button>`;
@@ -1686,7 +1733,7 @@ function viewEmployeeProfile(id){
   </div>`;
 }
 function saveEmployeeProfile(id){
-  if(!canEdit('hr')) return;
+  if(!canEditSub('hr',HR_SUB)) return;
   const e=DB.employees.find(x=>x.id===id); if(!e) return;
   const nm=$("e_nm").value.trim(), un=$("e_un").value.trim();
   if(!nm||!un){ alert("Employee name and username are required."); return; }
@@ -1705,7 +1752,7 @@ function saveEmployeeProfile(id){
   save(); toast("Employee profile saved."); render();
 }
 function addEmpModal(){
-  if(!canEdit('hr')){ alert("This role cannot create users. Ask Admin to grant the capability first."); return; }
+  if(!canEditSub('hr',HR_SUB)){ alert("This role cannot create users. Ask Admin to grant the capability first."); return; }
   openModal("Add Employee",`
     <div class="row"><div><label>Name</label><input id="a_nm"></div><div><label>Designation</label><input id="a_dg"></div></div>
     <label>System Role</label><select id="a_rl">${Object.keys(ROLES).map(r=>`<option value="${r}">${ROLES[r].name}</option>`).join("")}</select>
@@ -1733,7 +1780,7 @@ function pendingDeduction(name){
   return (DB.ledger||[]).filter(l=>l.emp===name && l.status==="Open" && (l.type==="Advance"||l.type==="Loan")).reduce((s,l)=>s+Math.min(l.installment||l.remaining,l.remaining),0);
 }
 function runPayrollMonth(){
-  if(!canEdit('payroll')){ alert("This role cannot run payroll."); return; }
+  if(!canEditSub('payroll','run')){ alert("This role cannot run payroll."); return; }
   const label=prompt("Payroll period label (e.g. July 2026):",new Date().toLocaleDateString('en-GB',{month:'long',year:'numeric'}));
   if(!label) return;
   DB.payrollRuns=DB.payrollRuns||[];
@@ -1753,7 +1800,7 @@ function runPayrollMonth(){
   alert(count?`Payroll run "${label}" complete — ${count} ledger deduction(s) applied.`:`Payroll run "${label}" complete — no outstanding advances/loans to deduct.`);
 }
 function addLedgerModal(){
-  if(!canEdit('payroll')){ alert("This role cannot manage the employee ledger."); return; }
+  if(!canEditSub('payroll','ledger')){ alert("This role cannot manage the employee ledger."); return; }
   const emps=DB.employees.filter(e=>e.salary>0);
   openModal("New Advance / Loan",`
     <label>Employee</label><select id="l_emp">${emps.map(e=>`<option>${e.name}</option>`).join("")}</select>
@@ -1778,7 +1825,7 @@ function viewLedgerTab(){
     <td>${l.emp}</td><td>${l.date}</td><td>${tag(l.type)}</td><td>${AED(l.amount)}</td>
     <td>${l.installment?AED(l.installment):'-'}</td><td>${l.type==="Deduction"?'-':AED(l.remaining)}</td>
     <td>${tag(l.status)}</td><td class="muted">${l.note||''}</td></tr>`).join("");
-  return `<div class="toolbar">${canEdit('payroll')?'<button class="btn-primary" onclick="addLedgerModal()">+ New Advance / Loan</button>':''}<button class="btn-ghost" onclick="exportLedger()">Export Ledger CSV</button><span class="muted">${rows.length} entries · advances/loans auto-deduct when payroll is run</span></div>
+  return `<div class="toolbar">${canEditSub('payroll','ledger')?'<button class="btn-primary" onclick="addLedgerModal()">+ New Advance / Loan</button>':''}<button class="btn-ghost" onclick="exportLedger()">Export Ledger CSV</button><span class="muted">${rows.length} entries · advances/loans auto-deduct when payroll is run</span></div>
     <div class="scroll"><table id="ldTbl"><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr>${colFilterRow(cols)}${body}</table></div>`;
 }
 let PAY_TAB="run";
@@ -1813,7 +1860,7 @@ function viewPayrollRun(){
     <div class="card"><h3>Payroll Run <span class="badge">WPS</span></h3>
     <div class="scroll"><table><tr><th>Employee</th><th>Designation</th><th>Basic (60%)</th><th>Allowances</th><th>Commission</th><th>Gross Pay</th><th>Ledger Deduction</th><th>Net Pay</th><th>Gratuity/mo</th></tr>${body}</table></div>
     <p class="muted" style="font-size:12px;margin-top:10px">Demo logic: Basic = 60% of salary; commission = 15% of activated MRC; gratuity = 21 days basic per year (UAE EOSB), accrued monthly. Ledger Deduction previews the outstanding advance/loan installment that "Run Payroll" will apply this period.</p>
-    ${canEdit('payroll')?'<button class="btn-primary" onclick="runPayrollMonth()">▶ Run Payroll (apply ledger deductions)</button> <button class="btn-ghost" onclick="exportWPS()">Generate WPS Demo File</button> <button class="btn-ghost" onclick="exportPayroll()">Export Payroll CSV</button>':''}</div>`;
+    ${canEditSub('payroll','run')?'<button class="btn-primary" onclick="runPayrollMonth()">▶ Run Payroll (apply ledger deductions)</button> <button class="btn-ghost" onclick="exportWPS()">Generate WPS Demo File</button> <button class="btn-ghost" onclick="exportPayroll()">Export Payroll CSV</button>':''}</div>`;
 }
 
 /* ============================================================
@@ -1825,7 +1872,7 @@ function accountBalance(id){
   return opening+(DB.accountTx||[]).filter(t=>t.account===id).reduce((s,t)=>s+t.amount,0);
 }
 function addAccountModal(){
-  if(!canEdit('accounting')){ alert("This role cannot manage the chart of accounts."); return; }
+  if(!canEditSub('accounting','coa')){ alert("This role cannot manage the chart of accounts."); return; }
   openModal("New Account",`
     <label>Account Name</label><input id="ac_nm" placeholder="e.g. ADIB Current Account">
     <label>Type</label><select id="ac_ty"><option>Bank</option><option>Cash</option></select>
@@ -1837,7 +1884,7 @@ function addAccountModal(){
   });
 }
 function editAccountModal(id){
-  if(!canEdit('accounting')) return;
+  if(!canEditSub('accounting','coa')) return;
   const a=DB.accounts.find(x=>x.id===id); if(!a) return;
   openModal("Edit Account",`
     <label>Account Name</label><input id="ac_nm" value="${a.name}">
@@ -1849,7 +1896,7 @@ function editAccountModal(id){
   });
 }
 function recordTxModal(){
-  if(!canEdit('accounting')){ alert("This role cannot post transactions."); return; }
+  if(!canEditSub('accounting','coa')){ alert("This role cannot post transactions."); return; }
   openModal("Record Transaction",`
     <label>Account</label><select id="tx_ac">${DB.accounts.map(a=>`<option value="${a.id}">${a.name}</option>`).join("")}</select>
     <label>Type</label><select id="tx_ty"><option>Deposit</option><option>Withdrawal</option></select>
@@ -1875,7 +1922,7 @@ function exportAccounts(){
   downloadText("digitalcoo-accounts.csv",toCsv([["Account","Type","Opening","Running Balance"],...rows]),"text/csv;charset=utf-8");
 }
 function viewChartOfAccounts(){
-  const editable=canEdit('accounting');
+  const editable=canEditSub('accounting','coa');
   const rows=DB.accounts.map(a=>`<tr><td>${a.name}</td><td>${tag(a.type)}</td><td>${AED(a.opening)}</td><td><b>${AED(accountBalance(a.id))}</b></td>
     <td style="white-space:nowrap"><button class="btn-ghost" onclick="openAccountTx('${a.id}')">${editable?'Transactions':'View'}</button>${editable?` <button class="btn-ghost" onclick="editAccountModal('${a.id}')">Edit</button>`:''}</td></tr>`).join("");
   const ar=DB.invoices.filter(i=>i.type==="Commission Income"&&i.status==="Outstanding").reduce((s,i)=>s+i.total,0);
@@ -1895,7 +1942,7 @@ function viewChartOfAccounts(){
 }
 // ---- Cheques (PDC) management ----
 function chequeStatus(id,status){
-  if(!canEdit('accounting')) return;
+  if(!canEditSub('accounting','cheques')) return;
   const c=DB.cheques.find(x=>x.id===id); if(!c) return;
   c.status=status;
   if(status==="Cleared"){
@@ -1905,7 +1952,7 @@ function chequeStatus(id,status){
   save(); render();
 }
 function addChequeModal(){
-  if(!canEdit('accounting')){ alert("This role cannot manage cheques."); return; }
+  if(!canEditSub('accounting','cheques')){ alert("This role cannot manage cheques."); return; }
   openModal("New Cheque",`
     <div class="row"><div><label>Cheque No.</label><input id="c_no"></div><div><label>Direction</label><select id="c_dir"><option>Received</option><option>Issued</option></select></div></div>
     <label>Party</label><input id="c_pt" placeholder="Customer / Vendor / Landlord">
@@ -1919,36 +1966,103 @@ function addChequeModal(){
     save(); render();
   });
 }
+function editChequeModal(id){
+  if(!canEditSub('accounting','cheques')){ alert("This role cannot manage cheques."); return; }
+  const c=DB.cheques.find(x=>x.id===id); if(!c) return;
+  openModal(`Edit Cheque — ${c.no}`,`
+    <div class="row"><div><label>Cheque No.</label><input id="ec_no" value="${c.no}"></div><div><label>Direction</label><select id="ec_dir"><option ${c.direction==='Received'?'selected':''}>Received</option><option ${c.direction==='Issued'?'selected':''}>Issued</option></select></div></div>
+    <label>Party</label><input id="ec_pt" value="${c.party}">
+    <div class="row"><div><label>Date</label><input id="ec_dt" type="date" value="${c.date}"></div><div><label>Due Date</label><input id="ec_dd" type="date" value="${c.dueDate}"></div></div>
+    <div class="row"><div><label>Amount (AED)</label><input id="ec_amt" type="number" value="${c.amount}"></div><div><label>Account</label><select id="ec_ac">${DB.accounts.map(a=>`<option value="${a.id}" ${a.id===c.account?'selected':''}>${a.name}</option>`).join("")}</select></div></div>
+    <label>Note</label><textarea id="ec_note" rows="2">${c.note||''}</textarea>
+  `,()=>{
+    const no=$("ec_no").value.trim(), amt=+$("ec_amt").value;
+    if(!no||amt<=0){ alert("Cheque number and a positive amount are required."); return false; }
+    c.no=no;c.direction=$("ec_dir").value;c.party=$("ec_pt").value.trim();c.date=$("ec_dt").value;c.dueDate=$("ec_dd").value;c.amount=amt;c.account=$("ec_ac").value;c.note=$("ec_note").value.trim();
+    save(); render();
+  });
+}
 function exportCheques(){
   const rows=DB.cheques.map(c=>[c.no,c.date,c.dueDate,c.direction,c.party,c.amount,(DB.accounts.find(a=>a.id===c.account)||{}).name||'',c.status,c.note||'']);
   downloadText("digitalcoo-cheques.csv",toCsv([["No","Date","Due Date","Direction","Party","Amount","Account","Status","Note"],...rows]),"text/csv;charset=utf-8");
 }
+let CHQ_SEARCH="", CHQ_SORT={key:"dueDate",dir:"desc"}, CHQ_PAGE=1, CHQ_PAGESIZE=10, CHQ_ACCT_FILTER="";
+function chqSetSearch(v){
+  CHQ_SEARCH=v; CHQ_PAGE=1; render();
+  const el=$("chqSearchInp"); if(el){ el.focus(); const p=el.value.length; el.setSelectionRange(p,p); }
+}
+function chqSetAccountFilter(v){ CHQ_ACCT_FILTER=v; CHQ_PAGE=1; render(); }
+function chqSetPageSize(v){ CHQ_PAGESIZE=+v; CHQ_PAGE=1; render(); }
+function chqSort(key){
+  if(CHQ_SORT.key===key) CHQ_SORT.dir=CHQ_SORT.dir==="asc"?"desc":"asc";
+  else CHQ_SORT={key,dir:"asc"};
+  render();
+}
+function chqGoPage(p){ CHQ_PAGE=p; render(); }
 function viewCheques(){
-  const editable=canEdit('accounting');
-  const rows=[...(DB.cheques||[])].sort((a,b)=>(b.dueDate||"").localeCompare(a.dueDate||""));
+  const editable=canEditSub('accounting','cheques');
+  const accName=c=>(DB.accounts.find(a=>a.id===c.account)||{}).name||'';
+  let rows=[...(DB.cheques||[])];
+  if(CHQ_ACCT_FILTER) rows=rows.filter(c=>c.account===CHQ_ACCT_FILTER);
+  if(CHQ_SEARCH.trim()){
+    const q=CHQ_SEARCH.trim().toLowerCase();
+    rows=rows.filter(c=>[c.no,c.party,c.direction,c.status,accName(c),String(c.amount)].some(v=>String(v||'').toLowerCase().includes(q)));
+  }
+  const sortVal=c=>CHQ_SORT.key==="amount"?c.amount:CHQ_SORT.key==="account"?accName(c):(c[CHQ_SORT.key]||'');
+  rows.sort((a,b)=>{ const va=sortVal(a),vb=sortVal(b); const cmp=va<vb?-1:va>vb?1:0; return CHQ_SORT.dir==="asc"?cmp:-cmp; });
   const pendingReceived=rows.filter(c=>c.direction==="Received"&&(c.status==="Pending"||c.status==="Deposited")).reduce((s,c)=>s+c.amount,0);
   const pendingIssued=rows.filter(c=>c.direction==="Issued"&&(c.status==="Pending"||c.status==="Deposited")).reduce((s,c)=>s+c.amount,0);
   const bounced=rows.filter(c=>c.status==="Bounced").length;
-  const cols=["No","Date","Due Date","Direction","Party","Amount","Account","Status",null];
-  const body=rows.map(c=>{
-    const acc=(DB.accounts.find(a=>a.id===c.account)||{}).name||'-';
+  const total=rows.length;
+  const totalPages=Math.max(1,Math.ceil(total/CHQ_PAGESIZE));
+  if(CHQ_PAGE>totalPages) CHQ_PAGE=totalPages;
+  const startIdx=(CHQ_PAGE-1)*CHQ_PAGESIZE;
+  const pageRows=rows.slice(startIdx,startIdx+CHQ_PAGESIZE);
+  const colDefs=[["no","No"],["date","Date"],["dueDate","Due Date"],["direction","Direction"],["party","Beneficiary"],["amount","Amount"],["account","Account"],["status","Status"]];
+  const arrow=k=>CHQ_SORT.key===k?(CHQ_SORT.dir==="asc"?" ▲":" ▼"):"";
+  const head=colDefs.map(([k,label])=>`<th style="cursor:pointer" onclick="chqSort('${k}')">${label}${arrow(k)}</th>`).join("")+"<th>Actions</th>";
+  const body=pageRows.length?pageRows.map(c=>{
+    const acc=accName(c)||'-';
     const terminal=c.status==="Cleared"||c.status==="Bounced";
-    let actions="";
+    let primary="";
     if(editable&&!terminal){
-      actions=(c.status==="Pending"?`<button class="btn-ghost" onclick="chequeStatus('${c.id}','Deposited')">Mark Deposited</button> `:'')+
-        `<button class="btn-ghost" onclick="chequeStatus('${c.id}','Cleared')">Mark Cleared</button> <button class="btn-ghost" onclick="chequeStatus('${c.id}','Bounced')">Mark Bounced</button>`;
+      primary=c.status==="Pending"?`<button class="btn-ghost" onclick="chequeStatus('${c.id}','Deposited')">Mark Deposited</button>`:`<button class="btn-ghost" onclick="chequeStatus('${c.id}','Cleared')">Mark Cleared</button>`;
     }
-    return `<tr><td>${c.no}</td><td>${c.date}</td><td>${c.dueDate}</td><td>${tag(c.direction)}</td><td>${c.party}</td><td>${AED(c.amount)}</td><td class="muted">${acc}</td><td>${tag(c.status)}</td><td style="white-space:nowrap">${actions}</td></tr>`;
-  }).join("");
+    return `<tr><td>${c.no}</td><td>${c.date}</td><td>${c.dueDate}</td><td>${tag(c.direction)}</td><td>${c.party}</td><td>${AED(c.amount)}</td><td class="muted">${acc}</td><td>${tag(c.status)}</td>
+      <td style="white-space:nowrap">${primary}${editable&&!terminal?` <button class="btn-ghost" title="Mark Bounced" onclick="chequeStatus('${c.id}','Bounced')">✗</button>`:''}${editable?` <button class="btn-ghost" title="Edit" onclick="editChequeModal('${c.id}')">✎</button>`:''}</td></tr>`;
+  }).join(""):`<tr><td colspan="9" class="empty">No cheques match this filter.</td></tr>`;
+  const showingFrom=total?startIdx+1:0, showingTo=Math.min(startIdx+CHQ_PAGESIZE,total);
+  const pager=`<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;flex-wrap:wrap;gap:8px">
+      <span class="muted" style="font-size:12px">Showing ${showingFrom} to ${showingTo} of ${total} entries</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn-ghost" ${CHQ_PAGE<=1?'disabled':''} onclick="chqGoPage(${CHQ_PAGE-1})">‹ Prev</button>
+        <span class="muted" style="font-size:12px">Page ${CHQ_PAGE} of ${totalPages}</span>
+        <button class="btn-ghost" ${CHQ_PAGE>=totalPages?'disabled':''} onclick="chqGoPage(${CHQ_PAGE+1})">Next ›</button>
+      </div>
+    </div>`;
   return `<div class="kpis">
       ${kpi("Pending Received",AED(pendingReceived),"var(--green)","Customer PDCs in hand")}
       ${kpi("Pending Issued",AED(pendingIssued),"var(--amber)","Cheques we've written")}
       ${kpi("Bounced",bounced,bounced?"var(--brand2)":"var(--green)","Needs follow-up")}
-      ${kpi("Total Cheques",rows.length,"var(--blue)","")}
+      ${kpi("Total Cheques",total,"var(--blue)","")}
     </div>
     <div class="card"><h3>Cheques (PDC) Management ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
-      <div class="toolbar">${editable?'<button class="btn-primary" onclick="addChequeModal()">+ New Cheque</button>':''}<button class="btn-ghost" onclick="exportCheques()">Export CSV</button></div>
-      <div class="scroll"><table><tr>${cols.map(c=>`<th>${c||''}</th>`).join("")}</tr>${colFilterRow(cols)}${body}</table></div>
+      <div class="toolbar">
+        <select onchange="chqSetAccountFilter(this.value)" style="width:auto">
+          <option value="">All accounts</option>
+          ${DB.accounts.map(a=>`<option value="${a.id}" ${CHQ_ACCT_FILTER===a.id?'selected':''}>${a.name}</option>`).join("")}
+        </select>
+        ${editable?'<button class="btn-primary" onclick="addChequeModal()">+ New Cheque</button>':''}
+        <button class="btn-ghost" onclick="exportCheques()">Export CSV</button>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <label class="muted" style="margin:0;font-size:12px">Show</label>
+          <select onchange="chqSetPageSize(this.value)" style="width:auto">${[10,25,50,100].map(n=>`<option value="${n}" ${CHQ_PAGESIZE===n?'selected':''}>${n}</option>`).join("")}</select>
+          <label class="muted" style="margin:0;font-size:12px">entries</label>
+        </span>
+      </div>
+      <div class="toolbar"><input id="chqSearchInp" placeholder="Search cheques…" value="${CHQ_SEARCH}" oninput="chqSetSearch(this.value)" style="max-width:260px"></div>
+      <div class="scroll"><table><tr>${head}</tr>${body}</table></div>
+      ${pager}
     </div>`;
 }
 let ACC_TAB="pl";
@@ -2060,8 +2174,13 @@ function aiReport(period){
 /* ============================================================
    ADMIN / SETTINGS (extensibility)
    ============================================================ */
+function allSubKeys(){
+  const out=[];
+  Object.keys(NAVDEF).forEach(m=>{ (NAVDEF[m].subs||[]).forEach(s=>out.push({key:m+'.'+s.key,mod:m,sub:s.key,label:NAVDEF[m].t+' ▸ '+s.t})); });
+  return out;
+}
 function viewAdminRoles(){
-  const editable=canEdit('admin');
+  const editable=canEditSub('admin','roles');
   const roles=Object.keys(ROLES);
   const mods=Object.keys(NAVDEF);
   let head=`<tr><th>Role \\ Module</th>${mods.map(m=>`<th style="text-transform:none">${NAVDEF[m].t}</th>`).join("")}</tr>`;
@@ -2074,15 +2193,31 @@ function viewAdminRoles(){
       const on=(DB.editAccess[r]||[]).includes(m);
       return `<td style="text-align:center">${tgl(on,!editable,`toggleEdit('${r}','${m}',this.checked)`)}</td>`;
     }).join("")}</tr>`).join("");
+  const subs=allSubKeys();
+  const shead=`<tr><th>Role \\ Subsection</th>${subs.map(s=>`<th style="text-transform:none">${s.label}</th>`).join("")}</tr>`;
+  const srows=roles.map(r=>`<tr><td><b>${ROLES[r].name}</b></td>${subs.map(s=>{
+      const on=subGranted(DB.access[r]||[],s.mod,s.sub);
+      return `<td style="text-align:center">${tgl(on,!editable,`toggleAccess('${r}','${s.key}',this.checked)`)}</td>`;
+    }).join("")}</tr>`).join("");
+  const serows=roles.map(r=>`<tr><td><b>${ROLES[r].name}</b></td>${subs.map(s=>{
+      const on=subGranted(DB.editAccess[r]||[],s.mod,s.sub);
+      return `<td style="text-align:center">${tgl(on,!editable,`toggleEdit('${r}','${s.key}',this.checked)`)}</td>`;
+    }).join("")}</tr>`).join("");
   return `<div class="card"><h3>View Access by Role ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
       <div class="scroll" style="max-height:none"><table>${head}${rows}</table></div>
       <p class="muted" style="font-size:12px;margin-top:8px">Controls what each role can <b>see</b> in the sidebar — this is the default for everyone in that role. To customize one specific person, use <b>People</b>.</p></div>
     <div class="card"><h3>Edit/Create Access by Role ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
       <div class="scroll" style="max-height:none"><table>${ehead}${erows}</table></div>
-      <p class="muted" style="font-size:12px;margin-top:8px">Controls what each role can <b>change</b> — independent of View access above.</p></div>`;
+      <p class="muted" style="font-size:12px;margin-top:8px">Controls what each role can <b>change</b> — independent of View access above.</p></div>
+    <div class="card"><h3>Subsection View Access by Role ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
+      <div class="scroll" style="max-height:none"><table>${shead}${srows}</table></div>
+      <p class="muted" style="font-size:12px;margin-top:8px">Narrows a role down to specific subsections instead of the whole module above (e.g. Accounting ▸ Cheques only, without P&amp;L or Chart of Accounts).</p></div>
+    <div class="card"><h3>Subsection Edit/Create Access by Role ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
+      <div class="scroll" style="max-height:none"><table>${shead}${serows}</table></div>
+      <p class="muted" style="font-size:12px;margin-top:8px">Granting Edit here also grants View for that same subsection automatically.</p></div>`;
 }
 function viewAdminPeople(){
-  const editable=canEdit('admin');
+  const editable=canEditSub('admin','people');
   const options=DB.employees.map(e=>`<option value="${e.id}" ${ADMIN_PICK===e.id?'selected':''}>${e.name} — ${ROLES[e.role].name}</option>`).join("");
   const picker=`<div class="card"><h3>People</h3>
     <label>Search / select a person</label><select onchange="ADMIN_PICK=this.value;render();"><option value="">— choose a person —</option>${options}</select></div>`;
@@ -2092,20 +2227,28 @@ function viewAdminPeople(){
   const overridden=DB.userAccess[e.id]!==undefined||DB.userEditAccess[e.id]!==undefined;
   const viewList=DB.userAccess[e.id]!==undefined?DB.userAccess[e.id]:(DB.access[e.role]||[]);
   const editList=DB.userEditAccess[e.id]!==undefined?DB.userEditAccess[e.id]:(DB.editAccess[e.role]||[]);
-  const rows=Object.keys(NAVDEF).map(m=>{
-    const hasEdit=EDIT_MODS.includes(m);
-    return `<tr><td>${NAVDEF[m].t}</td>
-      <td style="text-align:center">${tgl(viewList.includes(m),!editable,`toggleUserAccess('${e.id}','${m}',this.checked)`)}</td>
-      <td style="text-align:center">${hasEdit?tgl(editList.includes(m),!editable,`toggleUserEdit('${e.id}','${m}',this.checked)`):'<span class="muted">—</span>'}</td>
-    </tr>`;
-  }).join("");
+  const rows=[];
+  Object.keys(NAVDEF).forEach(m=>{
+    const d=NAVDEF[m]; const hasEdit=EDIT_MODS.includes(m);
+    rows.push(`<tr><td>${d.t}</td>
+      <td style="text-align:center">${tgl(moduleGranted(viewList,m),!editable,`toggleUserAccess('${e.id}','${m}',this.checked)`)}</td>
+      <td style="text-align:center">${hasEdit?tgl(moduleGranted(editList,m),!editable,`toggleUserEdit('${e.id}','${m}',this.checked)`):'<span class="muted">—</span>'}</td>
+    </tr>`);
+    (d.subs||[]).forEach(s=>{
+      const key=m+'.'+s.key;
+      rows.push(`<tr><td class="muted" style="padding-left:26px">↳ ${s.t}</td>
+        <td style="text-align:center">${tgl(subGranted(viewList,m,s.key),!editable,`toggleUserAccess('${e.id}','${key}',this.checked)`)}</td>
+        <td style="text-align:center">${tgl(subGranted(editList,m,s.key),!editable,`toggleUserEdit('${e.id}','${key}',this.checked)`)}</td>
+      </tr>`);
+    });
+  });
   return picker+`<div class="card"><h3>${e.name} <span class="muted" style="font-weight:400">(${ROLES[e.role].name})</span> ${overridden?'<span class="badge" style="background:var(--amber)">CUSTOM OVERRIDE</span>':'<span class="badge">ROLE DEFAULT</span>'}</h3>
-    <p class="muted" style="font-size:12px;margin-top:0">Toggling any switch below gives ${e.name} their own independent permissions, separate from every other ${ROLES[e.role].name}.</p>
+    <p class="muted" style="font-size:12px;margin-top:0">Toggling any switch below gives ${e.name} their own independent permissions, separate from every other ${ROLES[e.role].name}. Indented rows are subsections within the module above them.</p>
     ${editable&&overridden?`<button class="btn-ghost" onclick="resetUserOverride('${e.id}')" style="margin-bottom:10px">↺ Reset to role default</button>`:''}
-    <table><tr><th>Module</th><th>View</th><th>Edit/Create</th></tr>${rows}</table></div>`;
+    <table><tr><th>Module</th><th>View</th><th>Edit/Create</th></tr>${rows.join("")}</table></div>`;
 }
 function viewAdminUsers(){
-  const editable=canEdit('admin');
+  const editable=canEditSub('admin','users');
   const rows=DB.employees.map(e=>`<tr><td>${e.name}</td><td>${ROLES[e.role].name}</td><td><b style="color:var(--brand2)">${e.username||''}</b></td>
     <td>${editable?`<button class="btn-ghost" onclick="resetPasswordModal('${e.id}')">Change Password</button>`:''}</td></tr>`).join("");
   return `<div class="card"><h3>Users <span class="badge">ADMIN</span></h3>
@@ -2113,7 +2256,7 @@ function viewAdminUsers(){
     <div class="scroll" style="max-height:60vh"><table><tr><th>Name</th><th>Role</th><th>Username</th><th></th></tr>${rows}</table></div></div>`;
 }
 function viewAdminProducts(){
-  const editable=canEdit('admin');
+  const editable=canEditSub('admin','products');
   let prodRows=DB.products.map(p=>`<tr><td>${p.cat}</td><td>${p.title}</td><td>${AED(p.mrc)}</td>${editable?`<td style="white-space:nowrap"><button class="btn-ghost" onclick="editProduct('${p.id}')">Edit</button> <button class="btn-ghost" onclick="deleteProduct('${p.id}')">Delete</button></td>`:''}</tr>`).join("");
   return `<div class="card"><h3>Products / Plans ${editable?'<span class="badge">EDITABLE</span>':''}</h3>
       <div class="toolbar">${editable?'<button class="btn-primary" onclick="addProductModal()">+ Add Product</button>':''}<span class="muted">Define product, category &amp; default MRC — these feed the Pipeline product dropdown (auto-fills category &amp; MRC).</span></div>
@@ -2140,6 +2283,7 @@ function toggleAccess(role,mod,on){
 function toggleEdit(role,mod,on){
   const a=DB.editAccess[role]||(DB.editAccess[role]=[]); const i=a.indexOf(mod);
   if(on&&i<0)a.push(mod); if(!on&&i>=0)a.splice(i,1);
+  if(on) grantViewIfMissing(DB.access[role]||(DB.access[role]=[]),mod);
   save(); render();
 }
 // Shared password-change modal — the current password is never read back or displayed,
