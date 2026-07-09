@@ -5,7 +5,7 @@ import {
   Textarea, Alert, Loader, Center, Divider, Modal, Badge,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { Check, X, Info, MessageCircle, Send } from 'lucide-react';
 import { fetchPipelineOne, updatePipeline, escalateToTL, approvePipeline, rejectPipeline } from '../../api/pipeline';
 import { fetchProducts } from '../../api/products';
@@ -66,9 +66,16 @@ export default function PipelineDealPanel({ dealId }) {
   const { data, isLoading } = useQuery({ queryKey: ['pipeline', 'one', dealId], queryFn: () => fetchPipelineOne(dealId) });
   const deal = data?.data;
 
-  const productsQuery = useQuery({ queryKey: ['products', 'options'], queryFn: () => fetchProducts({ limit: 200 }) });
+  const productsQuery = useQuery({ queryKey: ['products', 'options'], queryFn: () => fetchProducts({ limit: 200, active: true }) });
   const products = productsQuery.data?.data || [];
+  // A deal's cat/product are free text, not a reference into the Product catalog, so a deal saved
+  // under a category/product that's since been renamed or deactivated has a value the live
+  // catalog no longer contains. Mantine's Select only displays a value present in its `data` —
+  // without this, that deal's dropdown renders blank even though the field is correctly populated,
+  // which reads as data loss rather than "not in the current catalog". Always include the deal's
+  // current value so what's actually saved is always visible, on top of whatever's pickable live.
   const categories = [...new Set(products.map((p) => p.cat))];
+  if (deal?.cat && !categories.includes(deal.cat)) categories.push(deal.cat);
 
   const reasonForm = useForm({ initialValues: { reason: '' } });
 
@@ -99,6 +106,7 @@ export default function PipelineDealPanel({ dealId }) {
   if (!deal) return <Text c="dimmed">Deal not found</Text>;
 
   const isTlOrAdmin = user.role === 'admin' || String(deal.tlId?._id || deal.tlId) === String(user.id);
+  const canApprove = isTlOrAdmin && user.editModules?.includes('pipeline.approve');
   const isOwnerOrTlOrAdmin = isTlOrAdmin || String(deal.agentId?._id) === String(user.id);
   const canAct = canEdit && isOwnerOrTlOrAdmin;
   const canEditFields = canAct;
@@ -116,7 +124,7 @@ export default function PipelineDealPanel({ dealId }) {
     }
     try {
       await updatePipeline(deal._id, values);
-      notifications.show({ color: 'dark', message: 'Deal updated' });
+      notifications.show({ color: 'green', message: 'Deal updated' });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not update', message: err.response?.data?.error || 'Something went wrong' });
@@ -133,7 +141,7 @@ export default function PipelineDealPanel({ dealId }) {
     if (!ok) return;
     try {
       await escalateToTL(deal._id);
-      notifications.show({ color: 'dark', message: 'Sent to Team Leader for approval' });
+      notifications.show({ color: 'green', message: 'Sent to Team Leader for approval' });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not request approval', message: err.response?.data?.error || 'Something went wrong' });
@@ -144,10 +152,10 @@ export default function PipelineDealPanel({ dealId }) {
     try {
       if (confirmAction === 'approve') {
         await approvePipeline(deal._id);
-        notifications.show({ color: 'dark', message: 'Approved and sent to Back Office' });
+        notifications.show({ color: 'green', message: 'Approved and sent to Back Office' });
       } else if (confirmAction === 'reject') {
         await rejectPipeline(deal._id, values.reason);
-        notifications.show({ color: 'dark', message: 'Rejected and returned to the agent' });
+        notifications.show({ color: 'green', message: 'Rejected and returned to the agent' });
       }
       setConfirmAction(null);
       reasonForm.reset();
@@ -158,6 +166,7 @@ export default function PipelineDealPanel({ dealId }) {
   };
 
   const productOptions = products.filter((p) => !editForm.values.cat || p.cat === editForm.values.cat).map((p) => p.title);
+  if (deal.product && !productOptions.includes(deal.product)) productOptions.push(deal.product);
   const info = confirmAction ? ACTION_INFO[confirmAction] : null;
 
   return (
@@ -235,7 +244,7 @@ export default function PipelineDealPanel({ dealId }) {
                   {deal.approval === 'rejected' ? 'Re-request Team Leader Approval' : 'Request Team Leader Approval'}
                 </Button>
               )}
-              {isTlOrAdmin && deal.approval === 'pending_tl' && (
+              {canApprove && deal.approval === 'pending_tl' && (
                 <>
                   <Button color="green" leftSection={<Check size={16} />} onClick={() => setConfirmAction('approve')}>
                     Approve → Back Office

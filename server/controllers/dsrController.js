@@ -12,12 +12,23 @@ function connectedFor(status) {
   return NOT_CONNECTED_STATUSES.includes(status) ? 'NO' : 'YES';
 }
 
+// At least 7 digits after stripping formatting - loose enough for local/international UAE
+// numbers, tight enough to catch the classic Excel gotcha where a leading 0 gets silently
+// dropped because the phone-number column was typed/saved as a numeric cell.
+const contactNoSchema = z
+  .string()
+  .trim()
+  .min(1, 'Contact No is required')
+  .refine((v) => v.replace(/\D/g, '').length >= 7, 'Contact No looks too short — check it wasn\'t stored as a number and lost a leading 0');
+
+const emailSchema = z.string().trim().refine((v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Not a valid email address');
+
 const createSchema = z.object({
   date: z.string().min(1),
   company: z.string().trim().min(1),
   building: z.string().optional().default(''),
-  contactNo: z.string().trim().min(1),
-  email: z.string().optional().default(''),
+  contactNo: contactNoSchema,
+  email: emailSchema.optional().default(''),
   customer: z.string().optional().default(''),
   status: z.enum(CALL_STATUS),
   remarks: z.string().optional().default(''),
@@ -33,8 +44,8 @@ const updateSchema = z.object({
   date: z.string().min(1).optional(),
   company: z.string().trim().min(1).optional(),
   building: z.string().optional(),
-  contactNo: z.string().trim().min(1).optional(),
-  email: z.string().optional(),
+  contactNo: contactNoSchema.optional(),
+  email: emailSchema.optional(),
   customer: z.string().optional(),
   status: z.enum(CALL_STATUS).optional(),
   remarks: z.string().optional(),
@@ -58,14 +69,21 @@ async function list(req, res, next) {
     const filter = { ...scopeFilter(req.user) };
 
     if (req.query.status) filter.status = req.query.status;
-    if (req.query.agentId) filter.agentId = req.query.agentId;
+    // agentId query param only narrows within what scopeFilter already allows — it must never
+    // widen access, so it's applied as an $and clause on top of the scope, not an override.
+    if (req.query.agentId) filter.$and = [...(filter.$and || []), { agentId: req.query.agentId }];
     if (req.query.search) {
       const re = new RegExp(req.query.search.trim(), 'i');
       // agentId is a reference, not a plain field — a search for the agent's name has to
       // resolve to their _id(s) first before it can be OR'd in alongside the plain-text fields.
       const matchingAgents = await User.find({ name: re }).select('_id').lean();
       filter.$and = [
-        { $or: [{ company: re }, { contactNo: re }, { customer: re }, { dsrNo: re }, { agentId: { $in: matchingAgents.map((u) => u._id) } }] },
+        {
+          $or: [
+            { company: re }, { contactNo: re }, { customer: re }, { dsrNo: re }, { building: re }, { remarks: re },
+            { agentId: { $in: matchingAgents.map((u) => u._id) } },
+          ],
+        },
       ];
     }
 
@@ -88,6 +106,12 @@ async function create(req, res, next) {
 
     const agent = req.user.role === 'agent' ? req.user : await User.findById(req.body.agentId);
     if (!agent) throw new AppError('Agent not found', 400);
+
+    if (req.user.role !== 'agent' && req.user.role !== 'admin') {
+      const inScope = [agent.managerChain?.[0], agent.managerChain?.[1], agent.managerChain?.[2], agent._id]
+        .map((id) => String(id)).includes(String(req.user._id));
+      if (!inScope) throw new AppError('You cannot log a call for an agent outside your team', 403);
+    }
 
     const seq = await nextSeq('dsr');
     const dsrNo = 'DSR-' + String(seq).padStart(5, '0');
@@ -194,7 +218,7 @@ async function autocomplete(req, res, next) {
 
 async function getOne(req, res, next) {
   try {
-    const dsr = await Dsr.findById(req.params.id).populate('agentId', 'name').lean();
+    const dsr = await Dsr.findOne({ _id: req.params.id, ...scopeFilter(req.user) }).populate('agentId', 'name').lean();
     if (!dsr) throw new AppError('DSR not found', 404);
     res.json({ data: dsr });
   } catch (err) {
@@ -229,12 +253,23 @@ async function exportDsr(req, res, next) {
   }
 }
 
+// Import rows come from a human-edited spreadsheet, not the app's own <input type="date">, so
+// the date is checked strictly (YYYY-MM-DD) instead of just "non-empty" — Excel silently
+// reformats a date-typed cell to whatever the file's locale display format is (e.g. "1/9/2026"),
+// and every date-range report in this app (Dashboard/MIS/AI) compares this field as a plain
+// string, so a non-ISO value here doesn't fail loudly, it just quietly reports wrong.
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Case-insensitive lookup so a stray autocapitalize in Excel ("interested" vs "Interested")
+// doesn't fail the whole row - resolved back to the exact enum value the schema expects.
+const STATUS_BY_LOWER = new Map(CALL_STATUS.map((s) => [s.toLowerCase(), s]));
+
 const importRowSchema = z.object({
-  date: z.string().min(1, 'Date is required'),
+  date: z.string().regex(ISO_DATE_RE, 'Date must be in YYYY-MM-DD format (check the cell wasn\'t auto-reformatted by Excel)'),
   company: z.string().trim().min(1, 'Company is required'),
   building: z.string().optional().default(''),
-  contactNo: z.string().trim().min(1, 'Contact No is required'),
-  email: z.string().optional().default(''),
+  contactNo: contactNoSchema,
+  email: emailSchema.optional().default(''),
   customer: z.string().optional().default(''),
   status: z.enum(CALL_STATUS, { errorMap: () => ({ message: `Status must be one of: ${CALL_STATUS.join(', ')}` }) }),
   remarks: z.string().optional().default(''),
@@ -248,11 +283,14 @@ async function importDsr(req, res, next) {
 
     const errors = [];
     let created = 0;
+    let skipped = 0;
+    const tlNotifyCounts = new Map(); // tlId -> count, one summary notification per TL instead of one per row
 
     for (let i = 0; i < rawRows.length; i += 1) {
       const raw = rawRows[i];
       const rowNum = i + 2; // account for the header row
       try {
+        const rawStatus = cell(raw, 'Status');
         const candidate = {
           date: cell(raw, 'Date'),
           company: cell(raw, 'Company'),
@@ -260,19 +298,33 @@ async function importDsr(req, res, next) {
           contactNo: cell(raw, 'Contact No'),
           email: cell(raw, 'Email'),
           customer: cell(raw, 'Customer'),
-          status: cell(raw, 'Status'),
+          status: STATUS_BY_LOWER.get(rawStatus.toLowerCase()) || rawStatus,
           remarks: cell(raw, 'Remarks'),
         };
+
+        // Collect every problem with this row in one pass (schema + agent lookup) instead of
+        // reporting only the first one - otherwise fixing one issue and re-uploading just
+        // reveals the next, and any row already fixed gets re-created as a duplicate.
+        const issues = [];
         const parsed = importRowSchema.safeParse(candidate);
-        if (!parsed.success) {
-          errors.push({ row: rowNum, message: parsed.error.issues[0].message });
-          continue;
-        }
-        const body = parsed.data;
+        if (!parsed.success) issues.push(parsed.error.issues[0].message);
 
         const { agent, error: agentError } = await resolveAgentFromRow(raw, req.user, User);
-        if (agentError) {
-          errors.push({ row: rowNum, message: agentError });
+        if (agentError) issues.push(agentError);
+
+        if (issues.length) {
+          errors.push({ row: rowNum, message: issues.join('; ') });
+          continue;
+        }
+
+        const body = parsed.data;
+
+        // Same file re-uploaded (accidentally or on purpose) must not create a second copy of
+        // a call that's already logged - match on the natural key a human would recognize as
+        // "the same call": this agent, this company/number, this day.
+        const existing = await Dsr.findOne({ agentId: agent._id, company: body.company, contactNo: body.contactNo, date: body.date }).select('_id').lean();
+        if (existing) {
+          skipped += 1;
           continue;
         }
 
@@ -291,12 +343,21 @@ async function importDsr(req, res, next) {
           history: [{ userId: req.user._id, text: `DSR imported from spreadsheet · status set to ${body.status}` }],
         });
         created += 1;
+        if (chain[0]) tlNotifyCounts.set(String(chain[0]), (tlNotifyCounts.get(String(chain[0])) || 0) + 1);
       } catch (rowErr) {
         errors.push({ row: rowNum, message: rowErr.message || 'Unexpected error' });
       }
     }
 
-    res.json({ data: { total: rawRows.length, created, failed: errors.length, errors } });
+    // One summary per TL, not one per imported row - a 50-row import shouldn't flood a TL's
+    // notification panel.
+    await Promise.all(
+      [...tlNotifyCounts.entries()].map(([tlId, count]) =>
+        notify(tlId, `${req.user.name} imported ${count} DSR${count === 1 ? '' : 's'} from a spreadsheet`, { refType: 'dsr' })
+      )
+    );
+
+    res.json({ data: { total: rawRows.length, created, skipped, failed: errors.length, errors } });
   } catch (err) {
     next(err);
   }

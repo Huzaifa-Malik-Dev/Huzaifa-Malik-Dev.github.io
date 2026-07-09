@@ -28,7 +28,7 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="dark">
-      <Notifications position="bottom-center" />
+      <Notifications position="bottom-right" limit={3} />
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AuthProvider>

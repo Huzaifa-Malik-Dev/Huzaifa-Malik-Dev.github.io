@@ -51,6 +51,6 @@ pipelineSchema.index({ tlId: 1, approval: 1, createdAt: -1 });
 pipelineSchema.index({ stage: 1 });
 pipelineSchema.index({ teamHeadId: 1, createdAt: -1 });
 pipelineSchema.index({ salesHeadId: 1, createdAt: -1 });
-pipelineSchema.index({ dsrId: 1 });
+pipelineSchema.index({ dsrId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Pipeline', pipelineSchema);

@@ -28,7 +28,7 @@ const { hashPassword } = require('./utils/password');
 const { buildManagerChain, createInitialAssignment } = require('./services/hierarchy');
 const { convertToPipeline, escalateToTL, tlApprove } = require('./services/workflow');
 const { PIPE_STAGES } = require('./utils/constants');
-const { ACCESS_DEFAULT, EDIT_ACCESS_DEFAULT, IMPORT_EXPORT_DEFAULT, ACTIONS_DEFAULT, CALL_STATUS } = require('./utils/constants');
+const { ACCESS_DEFAULT, EDIT_ACCESS_DEFAULT, IMPORT_EXPORT_DEFAULT, CALL_STATUS } = require('./utils/constants');
 
 const defUser = (name) => name.toLowerCase().replace(/[^a-z]/g, '');
 
@@ -58,11 +58,11 @@ async function createUser(data) {
       labourCardExpiry: '2027-06-01',
       insuranceIssue: '2026-01-01',
       insuranceExpiry: '2027-01-01',
-      legalCaseStatus: 'None',
+      legalCaseStatus: 'No',
       legalCaseNote: '',
-      abscondingMohre: 'None',
+      abscondingMohre: 'No',
       abscondingMohreNote: '',
-      abscondingGdrfa: 'None',
+      abscondingGdrfa: 'No',
       abscondingGdrfaNote: '',
     },
   });
@@ -101,7 +101,6 @@ async function run() {
     byRole: ACCESS_DEFAULT,
     editByRole: EDIT_ACCESS_DEFAULT,
     importExportByRole: IMPORT_EXPORT_DEFAULT,
-    actionsByRole: ACTIONS_DEFAULT,
     userOverrides: {},
   });
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Stack, Group, TextInput, Select, Button, Table, Text, Badge, Modal, Alert } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { Play, CheckCircle2, Trash2 } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import { usePagedList } from '../../hooks/usePagedList';
@@ -22,8 +22,8 @@ export default function PayrollRunTab({ canEdit }) {
   const { user } = useAuth();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
-  const canProcess = canEdit && user.actions?.includes('payroll.process');
-  const canDelete = canEdit && user.actions?.includes('payroll.delete');
+  const canProcess = user.editModules?.includes('payroll.process');
+  const canDelete = user.editModules?.includes('payroll.delete');
   const [month, setMonth] = useState(currentMonth());
   const [account, setAccount] = useState('');
   const [preview, setPreview] = useState(null);
@@ -56,7 +56,7 @@ export default function PayrollRunTab({ canEdit }) {
     }
     try {
       await processPayrollRun({ month, account });
-      notifications.show({ color: 'dark', message: `Payroll for ${month} processed` });
+      notifications.show({ color: 'green', message: `Payroll for ${month} processed` });
       setPreview(null);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       runsList.refetch();
@@ -75,7 +75,7 @@ export default function PayrollRunTab({ canEdit }) {
     if (!ok) return;
     try {
       await deletePayrollRun(run._id);
-      notifications.show({ color: 'dark', message: `Payroll run for ${run.month} deleted` });
+      notifications.show({ color: 'green', message: `Payroll run for ${run.month} deleted` });
       setViewRunId(null);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       runsList.refetch();

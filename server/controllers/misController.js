@@ -25,20 +25,26 @@ async function buildRollup(user, monthStr) {
   const range = monthRange(monthStr);
   const agents = await agentsInScope(user);
   const agentIds = agents.map((a) => a._id);
-  const dateMatch = range ? { createdAt: { $gte: range.start, $lt: range.end } } : {};
+  // Pipeline has no business "created" date field of its own, so createdAt is the best
+  // available signal there — but Dsr and Order both have a real business date (`date` /
+  // `actDate`) and must be filtered on that, not on record-insert time, so backfilled or
+  // edited rows land in the month they actually happened, not the month they were saved.
+  const createdAtMatch = range ? { createdAt: { $gte: range.start, $lt: range.end } } : {};
+  const dsrDateMatch = range ? { date: { $gte: range.start.toISOString().slice(0, 10), $lt: range.end.toISOString().slice(0, 10) } } : {};
+  const orderDateMatch = range ? { actDate: { $gte: range.start.toISOString().slice(0, 10), $lt: range.end.toISOString().slice(0, 10) } } : {};
 
   const [dsrCounts, interestedCounts, pipelineCounts, activatedAgg] = await Promise.all([
-    Dsr.aggregate([{ $match: { agentId: { $in: agentIds }, ...dateMatch } }, { $group: { _id: '$agentId', count: { $sum: 1 } } }]),
+    Dsr.aggregate([{ $match: { agentId: { $in: agentIds }, ...dsrDateMatch } }, { $group: { _id: '$agentId', count: { $sum: 1 } } }]),
     Dsr.aggregate([
-      { $match: { agentId: { $in: agentIds }, status: 'Interested', ...dateMatch } },
+      { $match: { agentId: { $in: agentIds }, status: 'Interested', ...dsrDateMatch } },
       { $group: { _id: '$agentId', count: { $sum: 1 } } },
     ]),
     Pipeline.aggregate([
-      { $match: { agentId: { $in: agentIds }, ...dateMatch } },
+      { $match: { agentId: { $in: agentIds }, ...createdAtMatch } },
       { $group: { _id: '$agentId', count: { $sum: 1 }, value: { $sum: '$mrc' } } },
     ]),
     Order.aggregate([
-      { $match: { agentId: { $in: agentIds }, status: 'Activated', ...dateMatch } },
+      { $match: { agentId: { $in: agentIds }, status: 'Activated', ...orderDateMatch } },
       { $group: { _id: '$agentId', count: { $sum: 1 }, mrc: { $sum: '$mrc' } } },
     ]),
   ]);

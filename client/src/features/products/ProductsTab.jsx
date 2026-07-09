@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button, Group, Modal, Stack, TextInput, Select, NumberInput, Badge, ActionIcon, Tooltip } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { Plus, Pencil, Trash2, Power } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import { usePagedList } from '../../hooks/usePagedList';
@@ -51,7 +51,7 @@ export default function ProductsTab({ canEdit }) {
   const handleCreate = async (values) => {
     try {
       await createProduct({ ...values, segmentId: values.segmentId || null });
-      notifications.show({ color: 'dark', message: 'Product created' });
+      notifications.show({ color: 'green', message: 'Product created' });
       setCreateOpen(false);
       form.reset();
       refresh();
@@ -63,7 +63,7 @@ export default function ProductsTab({ canEdit }) {
   const handleEdit = async (values) => {
     try {
       await updateProduct(editRow._id, { ...values, segmentId: values.segmentId || null });
-      notifications.show({ color: 'dark', message: 'Product updated' });
+      notifications.show({ color: 'green', message: 'Product updated' });
       setEditRow(null);
       refresh();
     } catch (err) {
@@ -83,7 +83,7 @@ export default function ProductsTab({ canEdit }) {
     if (!ok) return;
     try {
       await updateProduct(row._id, { active: !row.active });
-      notifications.show({ color: 'dark', message: `Product ${row.active ? 'deactivated' : 'activated'}` });
+      notifications.show({ color: 'green', message: `Product ${row.active ? 'deactivated' : 'activated'}` });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not update', message: err.response?.data?.error || 'Something went wrong' });
@@ -100,7 +100,7 @@ export default function ProductsTab({ canEdit }) {
     if (!ok) return;
     try {
       await deleteProduct(row._id);
-      notifications.show({ color: 'dark', message: 'Product deleted' });
+      notifications.show({ color: 'green', message: 'Product deleted' });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not delete', message: err.response?.data?.error || 'Something went wrong' });

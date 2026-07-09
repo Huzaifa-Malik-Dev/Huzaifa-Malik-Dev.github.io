@@ -45,7 +45,7 @@ orderSchema.index({ agentId: 1, createdAt: -1 });
 orderSchema.index({ tlId: 1, status: 1, createdAt: -1 });
 orderSchema.index({ teamHeadId: 1, createdAt: -1 });
 orderSchema.index({ salesHeadId: 1, createdAt: -1 });
-orderSchema.index({ pipelineId: 1 });
+orderSchema.index({ pipelineId: 1 }, { unique: true });
 orderSchema.index({ status: 1 });
 
 module.exports = mongoose.model('Order', orderSchema);

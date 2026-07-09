@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Paper, Title, TextInput, PasswordInput, Button, Stack, Center, Text, ActionIcon, useMantineColorScheme, useComputedColorScheme } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { Sun, Moon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -47,10 +47,11 @@ export default function LoginPage() {
       </ActionIcon>
       <Paper withBorder shadow="md" p={32} radius="md" w={380}>
         <Stack gap="lg">
-          <div>
-            <Title order={2}>Digitalcoo CRM</Title>
+          <Stack align="center" gap={4}>
+            <img src="/favicon-192.png" alt="Digitalcoo" width={64} height={64} />
+            <Title order={2} mt={4}>Digitalcoo CRM</Title>
             <Text c="dimmed" size="sm">Sign in to continue</Text>
-          </div>
+          </Stack>
           <form onSubmit={handleSubmit}>
             <Stack gap="md">
               <TextInput

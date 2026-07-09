@@ -18,6 +18,7 @@ async function requireAuth(req, res, next) {
 
     const user = await User.findById(payload.sub).select('-passwordHash');
     if (!user || !user.active) throw new AppError('Account not found or inactive', 401);
+    if ((payload.tv || 0) !== (user.tokenVersion || 0)) throw new AppError('Session expired, please log in again', 401);
 
     req.user = user;
     next();

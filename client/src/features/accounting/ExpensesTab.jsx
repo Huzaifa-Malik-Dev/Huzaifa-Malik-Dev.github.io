@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button, Group, Modal, Stack, TextInput, Select, NumberInput, Text, Badge, ActionIcon, Divider } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { Plus, Trash2 } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import { usePagedList } from '../../hooks/usePagedList';
@@ -38,7 +38,7 @@ export default function ExpensesTab({ canEdit }) {
     try {
       const payload = { ...values, breakdown: values.category === 'Salaries' ? values.breakdown : [] };
       await createExpense(payload);
-      notifications.show({ color: 'dark', message: 'Expense recorded' });
+      notifications.show({ color: 'green', message: 'Expense recorded' });
       setCreateOpen(false);
       form.reset();
       queryClient.invalidateQueries({ queryKey: ['accounting'] });

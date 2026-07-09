@@ -8,6 +8,7 @@ const path = require('path');
 
 const { clientOrigin, nodeEnv, uploadDir } = require('./config/env');
 const errorHandler = require('./middlewares/errorHandler');
+const requireAuth = require('./middlewares/auth');
 
 const authRoutes = require('./routes/auth');
 const dsrRoutes = require('./routes/dsr');
@@ -34,7 +35,15 @@ app.use(cookieParser());
 app.use(mongoSanitize());
 if (nodeEnv === 'development') app.use(morgan('dev'));
 
-app.use('/uploads', express.static(path.join(__dirname, uploadDir)));
+// Uploaded files include HR compliance documents and chat attachments — never public.
+// Any authenticated user may fetch by path (matches the app's general auth model; the paths
+// themselves are only ever handed out to users who already had access to the owning record).
+// Helmet's default Cross-Origin-Resource-Policy (same-origin) blocks the client from embedding
+// these as <img> thumbnails whenever client and API aren't on the exact same origin (e.g. the
+// separate Vite dev server port) — relax it to cross-origin for this route only. This doesn't
+// widen who can fetch a file: the cors() + requireAuth checks above still gate that; it only lets
+// an already-authorized fetch be rendered inline instead of forcing a new-tab navigation.
+app.use('/uploads', requireAuth, helmet.crossOriginResourcePolicy({ policy: 'cross-origin' }), express.static(path.join(__dirname, uploadDir)));
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 

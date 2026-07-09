@@ -54,6 +54,13 @@ async function resolveAgentFromRow(raw, actor, User) {
   if (!agent) {
     return { error: `No user found for Agent ${email ? `Email "${email}"` : `Username "${username}"`}` };
   }
+
+  if (actor.role !== 'admin') {
+    const inScope = [agent.managerChain?.[0], agent.managerChain?.[1], agent.managerChain?.[2], agent._id]
+      .map((id) => String(id)).includes(String(actor._id));
+    if (!inScope) return { error: `Agent "${agent.name}" is outside your team — you can only import on behalf of your own reports` };
+  }
+
   return { agent };
 }
 

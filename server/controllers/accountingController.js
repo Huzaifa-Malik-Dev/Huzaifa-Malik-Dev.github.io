@@ -149,16 +149,23 @@ async function createExpense(req, res, next) {
     }
 
     const expense = await Expense.create({ ...body, createdBy: req.user._id });
-    await postAccountTx({
-      account: body.account,
-      date: body.date,
-      type: 'Expense',
-      amount: -body.amount,
-      note: `${body.category}${body.note ? ' - ' + body.note : ''}`,
-      refType: 'Expense',
-      refId: expense._id,
-      createdBy: req.user._id,
-    });
+    try {
+      await postAccountTx({
+        account: body.account,
+        date: body.date,
+        type: 'Expense',
+        amount: -body.amount,
+        note: `${body.category}${body.note ? ' - ' + body.note : ''}`,
+        refType: 'Expense',
+        refId: expense._id,
+        createdBy: req.user._id,
+      });
+    } catch (err) {
+      // Ledger post failed — remove the expense so it's never left without its matching
+      // AccountTx (which would otherwise silently understate the account's true spend).
+      await Expense.deleteOne({ _id: expense._id });
+      throw err;
+    }
 
     res.status(201).json({ data: expense });
   } catch (err) {
@@ -232,9 +239,8 @@ async function updateChequeStatus(req, res, next) {
       throw new AppError(`Cannot move a ${cheque.status} cheque to ${status}`, 400);
     }
 
-    cheque.status = status;
-    await cheque.save();
-
+    // Post the ledger entry BEFORE persisting the status change for 'Cleared' — otherwise a
+    // failure here would leave the cheque marked Cleared with no corresponding AccountTx.
     if (status === 'Cleared') {
       const signed = cheque.direction === 'Received' ? cheque.amount : -cheque.amount;
       await postAccountTx({
@@ -248,6 +254,9 @@ async function updateChequeStatus(req, res, next) {
         createdBy: req.user._id,
       });
     }
+
+    cheque.status = status;
+    await cheque.save();
 
     res.json({ data: cheque });
   } catch (err) {

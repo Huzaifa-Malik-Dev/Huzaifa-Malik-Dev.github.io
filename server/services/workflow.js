@@ -21,11 +21,29 @@ const AppError = require('../utils/AppError');
 async function convertToPipeline(dsrId, extra, actor) {
   const dsr = await Dsr.findById(dsrId);
   if (!dsr) throw new AppError('DSR not found', 404);
+
+  const allowed =
+    actor.role === 'admin' ||
+    [dsr.tlId, dsr.teamHeadId, dsr.salesHeadId, dsr.agentId].some((id) => String(id) === String(actor._id));
+  if (!allowed) throw new AppError('You cannot convert this DSR', 403);
+
   if (dsr.status !== 'Interested') throw new AppError('Only "Interested" DSRs can be converted to pipeline', 400);
   if (dsr.convertedToPipeline) throw new AppError('This DSR is already in the pipeline', 400);
 
+  // Atomically claim the DSR before creating the Pipeline: a matching filter on
+  // convertedToPipeline:false means only one concurrent request can flip it, so a duplicate
+  // Pipeline can never be created for the same DSR even under a race.
+  const claimed = await Dsr.findOneAndUpdate(
+    { _id: dsrId, status: 'Interested', convertedToPipeline: { $ne: true } },
+    { $set: { convertedToPipeline: true } },
+    { new: true }
+  );
+  if (!claimed) throw new AppError('This DSR is already in the pipeline', 400);
+
   const mrc = (extra.qty || 1) * (extra.price || 0);
-  const pipeline = await Pipeline.create({
+  let pipeline;
+  try {
+    pipeline = await Pipeline.create({
     dsrId: dsr._id,
     dsrNo: dsr.dsrNo,
     agentId: dsr.agentId,
@@ -45,10 +63,13 @@ async function convertToPipeline(dsrId, extra, actor) {
     stage: '10%- Prospect',
     remarks: extra.remarks || '',
     history: [{ userId: actor._id, text: 'Converted from DSR to pipeline' }],
-  });
-
-  dsr.convertedToPipeline = true;
-  await dsr.save();
+    });
+  } catch (err) {
+    // Pipeline creation failed after the DSR was already claimed — release the claim so the
+    // DSR isn't left permanently locked with no pipeline behind it.
+    await Dsr.updateOne({ _id: dsrId }, { $set: { convertedToPipeline: false } });
+    throw err;
+  }
 
   return pipeline;
 }
@@ -78,21 +99,34 @@ async function ensureOrderForPipeline(pipeline, actor, reasonText) {
     return order;
   }
 
-  order = await Order.create({
-    pipelineId: pipeline._id,
-    dsrNo: pipeline.dsrNo,
-    agentId: pipeline.agentId,
-    tlId: pipeline.tlId,
-    teamHeadId: pipeline.teamHeadId,
-    salesHeadId: pipeline.salesHeadId,
-    customer: pipeline.customer,
-    cat: pipeline.cat,
-    product: pipeline.product,
-    qty: pipeline.qty,
-    mrc: pipeline.mrc,
-    status: 'New',
-    history: [{ userId: actor._id, text: reasonText }],
-  });
+  try {
+    order = await Order.create({
+      pipelineId: pipeline._id,
+      dsrNo: pipeline.dsrNo,
+      agentId: pipeline.agentId,
+      tlId: pipeline.tlId,
+      teamHeadId: pipeline.teamHeadId,
+      salesHeadId: pipeline.salesHeadId,
+      // Customer is optional on the DSR/Pipeline (a deal can be logged before a contact name is
+      // known) but required on Order - fall back to the company name rather than crash, since
+      // Company is always present by this point.
+      customer: pipeline.customer || pipeline.company,
+      cat: pipeline.cat,
+      product: pipeline.product,
+      qty: pipeline.qty,
+      mrc: pipeline.mrc,
+      status: 'New',
+      history: [{ userId: actor._id, text: reasonText }],
+    });
+  } catch (err) {
+    // Unique index on pipelineId means a concurrent request already created the order — fetch
+    // and return that one instead of erroring out or creating a duplicate.
+    if (err.code === 11000) {
+      order = await Order.findOne({ pipelineId: pipeline._id });
+      if (order) return order;
+    }
+    throw err;
+  }
 
   const backOfficeUsers = await User.find({ role: 'backoffice', active: true }).select('_id').lean();
   await notify(
@@ -128,11 +162,13 @@ async function tlApprove(pipelineId, actor) {
   if (pipeline.approval !== 'pending_tl') throw new AppError('This deal is not awaiting approval', 400);
   assertActorIsTlOrAbove(pipeline, actor);
 
+  // Order must exist before the pipeline is saved as approved — otherwise a failure here would
+  // leave the deal permanently stuck "approved" with no order behind it.
+  const order = await ensureOrderForPipeline(pipeline, actor, 'Order opened — Team Leader approved the deal');
+
   pipeline.approval = 'approved';
   pipeline.history.push({ userId: actor._id, text: 'Approved by Team Leader — sent to Back Office' });
   await pipeline.save();
-
-  const order = await ensureOrderForPipeline(pipeline, actor, 'Order opened — Team Leader approved the deal');
 
   await notify(pipeline.agentId, `Your deal ${pipeline.dsrNo} was approved and sent to Back Office`, {
     refType: 'pipeline',

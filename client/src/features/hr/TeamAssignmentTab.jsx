@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Stack, Paper, Group, Select, Badge, Text, Loader, Center, Accordion, Avatar, Box } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { fetchEmployees, updateEmployee } from '../../api/hr';
 import { useConfirm } from '../../context/ConfirmContext';
 import { colorFor, initials } from '../../utils/avatar';
@@ -62,7 +62,7 @@ export default function TeamAssignmentTab({ canEdit }) {
     if (!ok) return;
     try {
       await updateEmployee(person._id, { reportsTo: newManagerId });
-      notifications.show({ color: 'dark', message: `${person.name} now reports to ${newManagerName}` });
+      notifications.show({ color: 'green', message: `${person.name} now reports to ${newManagerName}` });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not reassign', message: err.response?.data?.error || 'Something went wrong' });

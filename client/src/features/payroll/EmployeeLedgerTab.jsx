@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button, Group, Modal, Stack, Select, NumberInput, TextInput, Badge, Text } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { Plus } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import { usePagedList } from '../../hooks/usePagedList';
@@ -35,7 +35,7 @@ export default function EmployeeLedgerTab({ canEdit }) {
   const handleCreate = async (values) => {
     try {
       await createLedgerEntry(values);
-      notifications.show({ color: 'dark', message: `${values.type} recorded` });
+      notifications.show({ color: 'green', message: `${values.type} recorded` });
       setCreateOpen(false);
       form.reset();
       queryClient.invalidateQueries({ queryKey: ['payroll', 'ledger'] });

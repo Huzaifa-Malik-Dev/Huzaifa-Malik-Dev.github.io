@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { Group, Button, Modal, Stack, FileInput, Text, ScrollArea, Alert, List } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../utils/toast';
 import { Download, Upload, TriangleAlert } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 // Shared Export/Import controls for any module that supports bulk spreadsheet access (DSR,
-// Pipeline, Back Office). Gated on user.importExportModules — a separate axis from view/edit,
+// Pipeline, Back Office, HR). Gated on user.importExportModules — a separate axis from view/edit,
 // set by admin per-role/per-user in Admin > Permissions (see server/services/permissions.js).
-export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, importFn, exportParams, onImported }) {
+// kind="xlsx" (default) is a plain spreadsheet; kind="zip" is a ZIP of data.xlsx + document files
+// (used by HR, where records carry uploaded passport/visa/etc. images alongside the data fields).
+export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, importFn, exportParams, onImported, kind = 'xlsx' }) {
   const { user } = useAuth();
   const [importOpen, setImportOpen] = useState(false);
   const [file, setFile] = useState(null);
@@ -17,6 +19,9 @@ export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, i
 
   if (!user.importExportModules?.includes(moduleKey)) return null;
 
+  const ext = kind === 'zip' ? 'zip' : 'xlsx';
+  const accept = kind === 'zip' ? '.zip' : '.xlsx,.xls,.csv';
+
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -24,7 +29,7 @@ export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, i
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${filenamePrefix}-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `${filenamePrefix}-export-${new Date().toISOString().slice(0, 10)}.${ext}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -49,12 +54,13 @@ export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, i
       const { data } = await importFn(file);
       setResult(data);
       const successCount = data.created ?? data.updated ?? 0;
+      const skippedNote = data.skipped ? `, ${data.skipped} already existed and were skipped` : '';
       if (data.failed === 0) {
-        notifications.show({ color: 'dark', message: `Import complete — ${successCount} row(s) processed` });
+        notifications.show({ color: 'green', message: `Import complete — ${successCount} row(s) processed${skippedNote}` });
         setImportOpen(false);
         onImported?.();
-      } else if (successCount > 0) {
-        notifications.show({ color: 'dark', message: `Imported ${successCount} row(s), ${data.failed} failed — see details` });
+      } else if (successCount > 0 || data.skipped > 0) {
+        notifications.show({ color: 'green', message: `Imported ${successCount} row(s)${skippedNote}, ${data.failed} failed — see details` });
         onImported?.();
       }
     } catch (err) {
@@ -78,10 +84,11 @@ export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, i
       <Modal opened={importOpen} onClose={() => setImportOpen(false)} title={`Import ${filenamePrefix}`} size="md">
         <Stack gap="sm">
           <Text size="sm" c="dimmed">
-            Upload an .xlsx, .xls, or .csv file. For best results, start from an exported file and edit it — the column
-            headers must match.
+            {kind === 'zip'
+              ? 'Upload a .zip file containing data.xlsx (and optionally document images/PDFs). For best results, start from an exported file and edit it — the column headers must match. Empty cells and unmatched documents leave existing data untouched.'
+              : 'Upload an .xlsx, .xls, or .csv file. For best results, start from an exported file and edit it — the column headers must match.'}
           </Text>
-          <FileInput placeholder="Choose file" accept=".xlsx,.xls,.csv" value={file} onChange={setFile} clearable />
+          <FileInput placeholder="Choose file" accept={accept} value={file} onChange={setFile} clearable />
           <Button onClick={handleImport} loading={importing} disabled={!file}>
             Upload
           </Button>
@@ -89,7 +96,8 @@ export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, i
           {result && (
             <Stack gap="xs">
               <Text size="sm">
-                {result.total} row(s) read · {result.created ?? result.updated ?? 0} succeeded · {result.failed} failed
+                {result.total} row(s) read · {result.created ?? result.updated ?? 0} succeeded
+                {result.skipped ? ` · ${result.skipped} already existed (skipped)` : ''} · {result.failed} failed
               </Text>
               {result.failed > 0 && (
                 <Alert color="red" icon={<TriangleAlert size={16} />} title="Some rows could not be imported">

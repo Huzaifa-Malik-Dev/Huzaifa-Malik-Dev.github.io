@@ -78,81 +78,90 @@ async function computePayrollLines(month) {
 // ONE Expense (category Salaries) debiting the chosen account - same "every expense
 // including salaries comes from one account" rule the Accounting module already enforces.
 async function processPayrollRun(month, accountId, userId) {
-  const existing = await PayrollRun.findOne({ month });
-  if (existing) throw new AppError(`Payroll for ${month} has already been processed`, 409);
-
   if (!(await Account.exists({ _id: accountId }))) throw new AppError('Account not found', 404);
 
   const { lines, totals } = await computePayrollLines(month);
   if (!lines.length) throw new AppError('No active salaried employees to pay', 400);
 
-  const expense = await Expense.create({
-    category: 'Salaries',
-    amount: totals.totalNet,
-    date: new Date().toISOString().slice(0, 10),
-    account: accountId,
-    note: `Payroll run - ${month}`,
-    breakdown: lines.map((l) => ({ employee: l.employee._id, amount: l.netPay, note: `${month} salary` })),
-    createdBy: userId,
-  });
-  await postAccountTx({
-    account: accountId,
-    date: new Date().toISOString().slice(0, 10),
-    type: 'Expense',
-    amount: -totals.totalNet,
-    note: `Salaries - Payroll run ${month}`,
-    refType: 'Expense',
-    refId: expense._id,
-    createdBy: userId,
-  });
-
-  const run = await PayrollRun.create({
-    month,
-    account: accountId,
-    expense: expense._id,
-    ...totals,
-    processedBy: userId,
-  });
-
-  for (const l of lines) {
-    const settledEntryIds = [];
-    for (const ledgerLine of l.ledgerLines) {
-      const entry = await LedgerEntry.findById(ledgerLine.entryId);
-      if (!entry) continue;
-      entry.remaining -= ledgerLine.amount;
-      if (entry.remaining <= 0) {
-        entry.remaining = 0;
-        entry.status = 'Settled';
-      }
-      await entry.save();
-
-      const deduction = await LedgerEntry.create({
-        employee: l.employee._id,
-        date: new Date().toISOString().slice(0, 10),
-        type: 'Deduction',
-        amount: ledgerLine.amount,
-        status: 'Settled',
-        note: `Payroll deduction - ${month}`,
-        createdBy: userId,
-        parent: entry._id,
-      });
-      settledEntryIds.push(deduction._id);
-    }
-
-    await PayrollLine.create({
-      payrollRun: run._id,
-      employee: l.employee._id,
-      basic: l.basic,
-      allowance: l.allowance,
-      commission: l.commission,
-      deductions: l.deductions,
-      netPay: l.netPay,
-      gratuityAccrual: l.gratuityAccrual,
-      ledgerEntries: settledEntryIds,
-    });
+  // Atomically claim this month BEFORE any side-effecting writes — the unique index on `month`
+  // means only one concurrent request can create this doc, so a race can never produce
+  // duplicate Expense/AccountTx/PayrollLine rows for the same month.
+  let run;
+  try {
+    run = await PayrollRun.create({ month, account: accountId, expense: null, ...totals, processedBy: userId });
+  } catch (err) {
+    if (err.code === 11000) throw new AppError(`Payroll for ${month} has already been processed`, 409);
+    throw err;
   }
 
-  return run;
+  try {
+    const expense = await Expense.create({
+      category: 'Salaries',
+      amount: totals.totalNet,
+      date: new Date().toISOString().slice(0, 10),
+      account: accountId,
+      note: `Payroll run - ${month}`,
+      breakdown: lines.map((l) => ({ employee: l.employee._id, amount: l.netPay, note: `${month} salary` })),
+      createdBy: userId,
+    });
+    await postAccountTx({
+      account: accountId,
+      date: new Date().toISOString().slice(0, 10),
+      type: 'Expense',
+      amount: -totals.totalNet,
+      note: `Salaries - Payroll run ${month}`,
+      refType: 'Expense',
+      refId: expense._id,
+      createdBy: userId,
+    });
+    run.expense = expense._id;
+    await run.save();
+
+    for (const l of lines) {
+      const settledEntryIds = [];
+      for (const ledgerLine of l.ledgerLines) {
+        const entry = await LedgerEntry.findById(ledgerLine.entryId);
+        if (!entry) continue;
+        entry.remaining -= ledgerLine.amount;
+        if (entry.remaining <= 0) {
+          entry.remaining = 0;
+          entry.status = 'Settled';
+        }
+        await entry.save();
+
+        const deduction = await LedgerEntry.create({
+          employee: l.employee._id,
+          date: new Date().toISOString().slice(0, 10),
+          type: 'Deduction',
+          amount: ledgerLine.amount,
+          status: 'Settled',
+          note: `Payroll deduction - ${month}`,
+          createdBy: userId,
+          parent: entry._id,
+        });
+        settledEntryIds.push(deduction._id);
+      }
+
+      await PayrollLine.create({
+        payrollRun: run._id,
+        employee: l.employee._id,
+        basic: l.basic,
+        allowance: l.allowance,
+        commission: l.commission,
+        deductions: l.deductions,
+        netPay: l.netPay,
+        gratuityAccrual: l.gratuityAccrual,
+        ledgerEntries: settledEntryIds,
+      });
+    }
+
+    return run;
+  } catch (err) {
+    // Something failed after the claim — release the month rather than leaving it permanently
+    // locked by a run stuck in a half-finished state.
+    await PayrollRun.deleteOne({ _id: run._id });
+    throw err;
+  }
 }
 
 // Fully undoes a processed run: restores every ledger entry it settled, deletes the auto-created

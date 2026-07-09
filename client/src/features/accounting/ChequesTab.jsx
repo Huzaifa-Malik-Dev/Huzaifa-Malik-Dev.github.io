@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button, Group, Modal, Stack, TextInput, Select, NumberInput, Badge, Textarea } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { Plus, X } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import { usePagedList } from '../../hooks/usePagedList';
@@ -38,7 +38,7 @@ export default function ChequesTab({ canEdit }) {
   const handleCreate = async (values) => {
     try {
       await createCheque(values);
-      notifications.show({ color: 'dark', message: 'Cheque added' });
+      notifications.show({ color: 'green', message: 'Cheque added' });
       setCreateOpen(false);
       form.reset();
       refresh();
@@ -50,7 +50,7 @@ export default function ChequesTab({ canEdit }) {
   const handleStatus = async (id, status) => {
     try {
       await updateChequeStatus(id, status);
-      notifications.show({ color: 'dark', message: `Cheque marked ${status}` });
+      notifications.show({ color: 'green', message: `Cheque marked ${status}` });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not update', message: err.response?.data?.error || 'Something went wrong' });

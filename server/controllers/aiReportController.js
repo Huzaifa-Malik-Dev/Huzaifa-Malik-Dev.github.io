@@ -48,8 +48,10 @@ async function getReport(req, res, next) {
         Pipeline.countDocuments({ ...scope, createdAt: { $gte: start, $lte: end } }),
         Pipeline.countDocuments({ ...scope, approval: 'approved', createdAt: { $gte: start, $lte: end } }),
         Pipeline.countDocuments({ ...scope, approval: 'rejected', createdAt: { $gte: start, $lte: end } }),
+        // actDate (real activation date) not createdAt — matches the DSR queries above, which
+        // already filter on their own business date field rather than record-insert time.
         Order.aggregate([
-          { $match: { ...scope, status: 'Activated', createdAt: { $gte: start, $lte: end } } },
+          { $match: { ...scope, status: 'Activated', actDate: { $gte: startDateStr, $lte: end.toISOString().slice(0, 10) } } },
           { $group: { _id: null, count: { $sum: 1 }, mrc: { $sum: '$mrc' }, commission: { $sum: '$commission' } } },
         ]),
         Order.countDocuments({ ...scope, status: 'On Hold' }),

@@ -1,36 +1,80 @@
 const { z } = require('zod');
 const { getPermissions, setPermissions } = require('../services/permissions');
-const { MODULES, ROLES, IMPORT_EXPORT_MODULES, ACTIONS } = require('../utils/constants');
+const {
+  MODULES,
+  ALL_PERMISSION_KEYS,
+  PERMISSION_TREE,
+  ROLES,
+  IMPORT_EXPORT_MODULES,
+  ACCESS_DEFAULT,
+  EDIT_ACCESS_DEFAULT,
+  IMPORT_EXPORT_DEFAULT,
+} = require('../utils/constants');
 const AppError = require('../utils/AppError');
 
 async function getPermissionsDoc(req, res, next) {
   try {
     const perms = getPermissions();
-    res.json({ data: { ...perms, modules: MODULES, roles: ROLES, importExportModules: IMPORT_EXPORT_MODULES, actionDefs: ACTIONS } });
+    res.json({ data: { ...perms, modules: MODULES, tree: PERMISSION_TREE, roles: ROLES, importExportModules: IMPORT_EXPORT_MODULES } });
   } catch (err) {
     next(err);
   }
 }
 
 const levelSchema = z.enum(['none', 'view', 'edit']);
-const moduleSchema = z.enum(MODULES);
+// Accepts top-level modules AND nested tab/action keys (e.g. 'hr.addEmployee') - both live in the
+// same flat view/edit lists, so a single key space covers both.
+const moduleSchema = z.enum(ALL_PERMISSION_KEYS);
 
-// Adds/removes `module` from a view list and an edit list so the result matches `level`
+// Adds/removes `key` from a view list and an edit list so the result matches `level`
 // ('edit' implies 'view', same as every other view/edit gate in this app).
-function applyLevel(viewList, editList, module, level) {
+function applyLevel(viewList, editList, key, level) {
   const view = new Set(viewList || []);
   const edit = new Set(editList || []);
   if (level === 'none') {
-    view.delete(module);
-    edit.delete(module);
+    view.delete(key);
+    edit.delete(key);
   } else if (level === 'view') {
-    view.add(module);
-    edit.delete(module);
+    view.add(key);
+    edit.delete(key);
   } else {
-    view.add(module);
-    edit.add(module);
+    view.add(key);
+    edit.add(key);
   }
   return { view: [...view], edit: [...edit] };
+}
+
+// A nested key can never have MORE access than its parent module, and lowering a module must
+// bring every child down with it - otherwise the stored data (and the admin UI) can show a
+// child as "Edit" while its parent sits at "None", which is exactly the confusing, meaningless
+// state this cascade prevents. canView/canEdit already enforce this at read time as a backstop,
+// but keeping the stored data itself consistent means the UI never displays a lie.
+function applyLevelWithCascade(viewList, editList, key, level) {
+  const { view, edit } = applyLevel(viewList, editList, key, level);
+  const viewSet = new Set(view);
+  const editSet = new Set(edit);
+
+  if (key.includes('.')) {
+    const parentKey = key.split('.')[0];
+    if (!viewSet.has(parentKey)) {
+      viewSet.delete(key);
+      editSet.delete(key);
+    } else if (!editSet.has(parentKey)) {
+      editSet.delete(key);
+    }
+  } else {
+    const section = PERMISSION_TREE.find((m) => m.key === key);
+    (section?.children || []).forEach((c) => {
+      if (!viewSet.has(key)) {
+        viewSet.delete(c.key);
+        editSet.delete(c.key);
+      } else if (!editSet.has(key)) {
+        editSet.delete(c.key);
+      }
+    });
+  }
+
+  return { view: [...viewSet], edit: [...editSet] };
 }
 
 // Guards against an admin editing their own way into a state where nobody (including them)
@@ -65,7 +109,7 @@ async function updateRolePermission(req, res, next) {
     const { role, module, level } = parsed.data;
 
     const perms = getPermissions();
-    const { view, edit } = applyLevel(perms.byRole[role], perms.editByRole[role], module, level);
+    const { view, edit } = applyLevelWithCascade(perms.byRole[role], perms.editByRole[role], module, level);
 
     if (module === 'admin') assertNotSelfLockout(req, { affectsRole: role, resultingEdit: edit });
 
@@ -73,6 +117,36 @@ async function updateRolePermission(req, res, next) {
     // Mixed-type field without touching the rest of the document.
     const updated = await setPermissions({
       $set: { [`byRole.${role}`]: view, [`editByRole.${role}`]: edit },
+    });
+    res.json({ data: updated });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const roleResetSchema = z.object({ role: z.enum(Object.keys(ROLES)) });
+
+// Resets one role's view/edit/import-export grants back to the shipped system defaults -
+// the role-mode equivalent of "Reset to role default" for a person override. Any per-user
+// overrides for people in this role are untouched (that's a separate, per-person axis).
+async function resetRolePermission(req, res, next) {
+  try {
+    const parsed = roleResetSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400);
+    const { role } = parsed.data;
+
+    const defaultView = ACCESS_DEFAULT[role] || [];
+    const defaultEdit = EDIT_ACCESS_DEFAULT[role] || [];
+    const defaultImportExport = IMPORT_EXPORT_DEFAULT[role] || [];
+
+    assertNotSelfLockout(req, { affectsRole: role, resultingEdit: defaultEdit });
+
+    const updated = await setPermissions({
+      $set: {
+        [`byRole.${role}`]: defaultView,
+        [`editByRole.${role}`]: defaultEdit,
+        [`importExportByRole.${role}`]: defaultImportExport,
+      },
     });
     res.json({ data: updated });
   } catch (err) {
@@ -126,70 +200,15 @@ async function updateUserImportExportOverride(req, res, next) {
 
     const perms = getPermissions();
     const existing = perms.userOverrides?.[userId];
-    // Keep this user's existing view/edit/actions override (or their role default) intact - only
+    // Keep this user's existing view/edit override (or their role default) intact - only
     // the importExport list changes here.
     const view = existing?.view ?? perms.byRole[role] ?? [];
     const edit = existing?.edit ?? perms.editByRole[role] ?? [];
-    const actions = existing?.actions ?? perms.actionsByRole?.[role] ?? [];
     const baseImportExport = existing?.importExport ?? perms.importExportByRole?.[role] ?? [];
     const importExport = toggleModule(baseImportExport, module, enabled);
 
     const updated = await setPermissions({
-      $set: { [`userOverrides.${userId}`]: { view, edit, importExport, actions } },
-    });
-    res.json({ data: updated });
-  } catch (err) {
-    next(err);
-  }
-}
-
-const actionSchema = z.enum(ACTIONS.map((a) => a.key));
-
-const roleActionSchema = z.object({
-  role: z.enum(Object.keys(ROLES)),
-  action: actionSchema,
-  enabled: z.boolean(),
-});
-
-async function updateRoleAction(req, res, next) {
-  try {
-    const parsed = roleActionSchema.safeParse(req.body);
-    if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400);
-    const { role, action, enabled } = parsed.data;
-
-    const perms = getPermissions();
-    const list = toggleModule(perms.actionsByRole?.[role], action, enabled);
-
-    const updated = await setPermissions({ $set: { [`actionsByRole.${role}`]: list } });
-    res.json({ data: updated });
-  } catch (err) {
-    next(err);
-  }
-}
-
-const userActionSchema = z.object({
-  userId: z.string().min(1),
-  action: actionSchema,
-  enabled: z.boolean(),
-  role: z.enum(Object.keys(ROLES)),
-});
-
-async function updateUserActionOverride(req, res, next) {
-  try {
-    const parsed = userActionSchema.safeParse(req.body);
-    if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400);
-    const { userId, action, enabled, role } = parsed.data;
-
-    const perms = getPermissions();
-    const existing = perms.userOverrides?.[userId];
-    const view = existing?.view ?? perms.byRole[role] ?? [];
-    const edit = existing?.edit ?? perms.editByRole[role] ?? [];
-    const importExport = existing?.importExport ?? perms.importExportByRole?.[role] ?? [];
-    const baseActions = existing?.actions ?? perms.actionsByRole?.[role] ?? [];
-    const actions = toggleModule(baseActions, action, enabled);
-
-    const updated = await setPermissions({
-      $set: { [`userOverrides.${userId}`]: { view, edit, importExport, actions } },
+      $set: { [`userOverrides.${userId}`]: { view, edit, importExport } },
     });
     res.json({ data: updated });
   } catch (err) {
@@ -216,16 +235,15 @@ async function updateUserOverride(req, res, next) {
     const existing = perms.userOverrides?.[userId];
     const baseView = existing?.view ?? perms.byRole[role] ?? [];
     const baseEdit = existing?.edit ?? perms.editByRole[role] ?? [];
-    const { view, edit } = applyLevel(baseView, baseEdit, module, level);
-    // importExport/actions are separate axes (see updateUser*Override) — preserve whatever this
-    // user already has instead of dropping them every time view/edit changes.
+    const { view, edit } = applyLevelWithCascade(baseView, baseEdit, module, level);
+    // importExport is a separate axis (see updateUserImportExportOverride) — preserve whatever
+    // this user already has instead of dropping it every time view/edit changes.
     const importExport = existing?.importExport ?? perms.importExportByRole?.[role] ?? [];
-    const actions = existing?.actions ?? perms.actionsByRole?.[role] ?? [];
 
     if (module === 'admin') assertNotSelfLockout(req, { affectsUserId: userId, resultingEdit: edit });
 
     const updated = await setPermissions({
-      $set: { [`userOverrides.${userId}`]: { view, edit, importExport, actions } },
+      $set: { [`userOverrides.${userId}`]: { view, edit, importExport } },
     });
     res.json({ data: updated });
   } catch (err) {
@@ -254,10 +272,9 @@ async function clearUserOverride(req, res, next) {
 module.exports = {
   getPermissionsDoc,
   updateRolePermission,
+  resetRolePermission,
   updateUserOverride,
   clearUserOverride,
   updateRoleImportExport,
   updateUserImportExportOverride,
-  updateRoleAction,
-  updateUserActionOverride,
 };

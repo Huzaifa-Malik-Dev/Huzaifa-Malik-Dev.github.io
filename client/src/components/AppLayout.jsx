@@ -1,26 +1,30 @@
 import { AppShell, Group, Text, NavLink, Avatar, Menu, UnstyledButton, Badge, Box, ActionIcon, useMantineColorScheme, useComputedColorScheme } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, ChevronDown, Menu as MenuIcon, Sun, Moon } from 'lucide-react';
+import { LogOut, ChevronDown, Menu as MenuIcon, Sun, Moon, UserCog } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { NAV_ITEMS, ROLE_LABELS } from '../constants/nav';
 import NotificationBell from './NotificationBell';
+import ProfileModal from './ProfileModal';
+import { useNotificationToasts } from '../hooks/useNotificationToasts';
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
+  const [profileOpened, { open: openProfile, close: closeProfile }] = useDisclosure(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { setColorScheme } = useMantineColorScheme();
   const computedColorScheme = useComputedColorScheme('dark');
+  useNotificationToasts();
 
   const visibleNav = NAV_ITEMS.filter((item) => user.modules.includes(item.key));
 
   return (
     <AppShell
       header={{ height: 60 }}
-      navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !mobileOpened, desktop: !desktopOpened } }}
+      navbar={{ width: 244, breakpoint: 'sm', collapsed: { mobile: !mobileOpened, desktop: !desktopOpened } }}
       padding="md"
     >
       <AppShell.Header>
@@ -29,7 +33,10 @@ export default function AppLayout() {
             <UnstyledButton onClick={() => { toggleMobile(); toggleDesktop(); }}>
               <MenuIcon size={20} />
             </UnstyledButton>
-            <Text fw={700} size="lg">Digitalcoo CRM</Text>
+            <Group gap={8} wrap="nowrap">
+              <img src="/favicon-192.png" alt="" width={28} height={28} style={{ display: 'block' }} />
+              <Text fw={700} size="lg" visibleFrom="xs">Digitalcoo CRM</Text>
+            </Group>
           </Group>
           <Group gap="md">
             <ActionIcon
@@ -55,6 +62,10 @@ export default function AppLayout() {
                 </UnstyledButton>
               </Menu.Target>
               <Menu.Dropdown>
+                <Menu.Item leftSection={<UserCog size={14} />} onClick={openProfile}>
+                  My Profile
+                </Menu.Item>
+                <Menu.Divider />
                 <Menu.Item leftSection={<LogOut size={14} />} onClick={() => { logout(); navigate('/login'); }}>
                   Log out
                 </Menu.Item>
@@ -63,6 +74,8 @@ export default function AppLayout() {
           </Group>
         </Group>
       </AppShell.Header>
+
+      <ProfileModal opened={profileOpened} onClose={closeProfile} />
 
       <AppShell.Navbar p="sm">
         {visibleNav.map((item) => (

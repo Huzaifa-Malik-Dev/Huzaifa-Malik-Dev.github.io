@@ -16,6 +16,8 @@ module.exports = {
   pageSizeDefault: parseInt(process.env.PAGE_SIZE_DEFAULT || '50', 10),
   pageSizeMax: parseInt(process.env.PAGE_SIZE_MAX || '200', 10),
   uploadDir: process.env.UPLOAD_DIR || 'uploads',
-  uploadMaxKb: parseInt(process.env.UPLOAD_MAX_KB || '800', 10),
+  uploadMaxKb: parseInt(process.env.UPLOAD_MAX_KB || '5120', 10),
   bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10),
+  loginRateLimitWindowMin: parseInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MIN || '15', 10),
+  loginRateLimitMax: parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '20', 10),
 };

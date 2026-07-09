@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const AssignmentHistory = require('../models/AssignmentHistory');
+const AppError = require('../utils/AppError');
 
 // Walks reportsTo up to the top and returns the ancestor chain as an array of ObjectIds,
 // immediate manager first. This is stamped onto the user so role-scoped queries
@@ -50,6 +51,26 @@ async function reassignUser(userId, { role, reportsTo }, changedBy = null) {
 
   const newRole = role || user.role;
   const newReportsTo = reportsTo !== undefined ? reportsTo : user.reportsTo;
+
+  if (newReportsTo) {
+    if (String(newReportsTo) === String(userId)) {
+      throw new AppError('A user cannot report to themselves', 400);
+    }
+    // Walk the proposed manager's own chain up to the top — if this user appears anywhere in
+    // it, assigning them would create a cycle (this user would end up reporting to their own
+    // descendant), which buildManagerChain's depth guard would otherwise mask instead of reject.
+    let current = newReportsTo;
+    let guard = 0;
+    while (current && guard < 20) {
+      if (String(current) === String(userId)) {
+        throw new AppError('This assignment would create a reporting-chain cycle', 400);
+      }
+      const manager = await User.findById(current).select('reportsTo').lean();
+      if (!manager) break;
+      current = manager.reportsTo;
+      guard += 1;
+    }
+  }
 
   const now = new Date();
   await AssignmentHistory.updateMany(

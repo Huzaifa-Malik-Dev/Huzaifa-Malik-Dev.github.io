@@ -18,10 +18,15 @@ async function list(req, res, next) {
   try {
     const afterSeq = parseInt(req.query.afterSeq, 10) || 0;
     const limit = Math.min(100, parseInt(req.query.limit, 10) || 50);
+    // Sort newest-first so a `limit` cap takes the MOST RECENT notifications, not whichever
+    // happen to be oldest since afterSeq — otherwise a user with >limit notifications since
+    // their cursor could never see anything recent. Reversed back to ascending before sending
+    // so the response stays chronological for callers that render/append in that order.
     const items = await Notification.find({ userId: req.user._id, seq: { $gt: afterSeq } })
-      .sort({ seq: 1 })
+      .sort({ seq: -1 })
       .limit(limit)
       .lean();
+    items.reverse();
 
     // Thread notifications carry a Thread._id as refId - resolve those to a dsrNo so the client
     // can open the right chat directly on click, without a lookup of its own.

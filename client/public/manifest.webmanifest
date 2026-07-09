@@ -1,0 +1,13 @@
+{
+  "name": "Digitalcoo CRM",
+  "short_name": "Digitalcoo CRM",
+  "description": "Digitalcoo CRM — sales, HR, payroll & accounting for Digitalcoo Technologies LLC",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1623",
+  "theme_color": "#e30613",
+  "icons": [
+    { "src": "/favicon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/favicon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

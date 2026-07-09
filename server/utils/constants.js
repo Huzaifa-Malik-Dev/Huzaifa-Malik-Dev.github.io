@@ -15,9 +15,72 @@ const ROLES = {
 // Used to build managerChain on User save.
 const CHAIN_ROLES = ['team_leader', 'teams_head', 'sales_head'];
 
-const MODULES = ['dash', 'dsr', 'pipeline', 'backoffice', 'mis', 'hr', 'payroll', 'accounting', 'ai', 'products', 'admin'];
+// Nested permission tree - every module, plus its tabs/functionality, as its own None/View/Edit
+// key. A child key (e.g. 'hr.addEmployee') is checked exactly the same way as a top-level module
+// key by canView/canEdit - it's just a more specific entry in the same flat view/edit lists, so
+// no separate storage or check logic is needed for nesting. Displayed nested under its parent in
+// Admin > Permissions.
+const PERMISSION_TREE = [
+  { key: 'dash', label: 'Dashboard' },
+  { key: 'dsr', label: 'DSR — Agent' },
+  {
+    key: 'pipeline',
+    label: 'Sales Pipeline',
+    children: [{ key: 'pipeline.approve', label: 'Approve / Reject Deals (Team Leader)' }],
+  },
+  {
+    key: 'backoffice',
+    label: 'Back Office / Orders',
+    children: [{ key: 'backoffice.statusChange', label: 'Change Order Status' }],
+  },
+  { key: 'mis', label: 'MIS & Targets' },
+  {
+    key: 'hr',
+    label: 'HR',
+    children: [
+      { key: 'hr.dashboard', label: 'Dashboard' },
+      { key: 'hr.allEmployees', label: 'All Employees' },
+      { key: 'hr.activeEmployees', label: 'Active Employees' },
+      { key: 'hr.teamAssignment', label: 'Team Assignment' },
+      { key: 'hr.passportManagement', label: 'Passport Management' },
+      { key: 'hr.addEmployee', label: 'Add Employee' },
+    ],
+  },
+  {
+    key: 'payroll',
+    label: 'Payroll',
+    children: [
+      { key: 'payroll.run', label: 'Payroll Run' },
+      { key: 'payroll.ledger', label: 'Employee Ledger' },
+      { key: 'payroll.process', label: 'Process Payroll Runs' },
+      { key: 'payroll.delete', label: 'Delete Payroll Runs' },
+    ],
+  },
+  {
+    key: 'accounting',
+    label: 'Accounting',
+    children: [
+      { key: 'accounting.chartOfAccounts', label: 'Chart of Accounts' },
+      { key: 'accounting.expenses', label: 'Company Expenses' },
+      { key: 'accounting.cheques', label: 'Cheques' },
+    ],
+  },
+  { key: 'ai', label: 'AI Reports' },
+  {
+    key: 'products',
+    label: 'Products & Segments',
+    children: [
+      { key: 'products.products', label: 'Products' },
+      { key: 'products.segments', label: 'Segments' },
+    ],
+  },
+  { key: 'admin', label: 'Admin / Settings' },
+];
 
-const ACCESS_DEFAULT = {
+const MODULES = PERMISSION_TREE.map((m) => m.key);
+const ALL_PERMISSION_KEYS = PERMISSION_TREE.flatMap((m) => [m.key, ...(m.children || []).map((c) => c.key)]);
+
+const MODULE_ACCESS_DEFAULT = {
   admin: ['dash', 'dsr', 'pipeline', 'backoffice', 'mis', 'hr', 'payroll', 'accounting', 'ai', 'products', 'admin'],
   sales_head: ['dash', 'pipeline', 'mis', 'ai', 'products'],
   teams_head: ['dash', 'pipeline', 'mis', 'ai', 'products'],
@@ -28,7 +91,7 @@ const ACCESS_DEFAULT = {
   hr: ['dash', 'hr', 'payroll', 'ai'],
 };
 
-const EDIT_ACCESS_DEFAULT = {
+const MODULE_EDIT_DEFAULT = {
   admin: ['dsr', 'pipeline', 'backoffice', 'hr', 'payroll', 'accounting', 'products', 'admin'],
   sales_head: ['pipeline'],
   teams_head: ['pipeline'],
@@ -38,6 +101,44 @@ const EDIT_ACCESS_DEFAULT = {
   accountant: ['payroll', 'accounting'],
   hr: [],
 };
+
+// A role that can view/edit a module gets every tab under it by default too (admin can narrow
+// this later in Permissions) - EXCEPT the small set of dangerous action children below, which
+// stay locked down even for someone with full module edit, until explicitly granted.
+function expandWithChildren(moduleAccessByRole) {
+  const out = {};
+  Object.keys(moduleAccessByRole).forEach((role) => {
+    const set = new Set();
+    moduleAccessByRole[role].forEach((key) => {
+      set.add(key);
+      const section = PERMISSION_TREE.find((m) => m.key === key);
+      (section?.children || []).forEach((c) => set.add(c.key));
+    });
+    out[role] = [...set];
+  });
+  return out;
+}
+
+// Restrictive edit-only overrides for specific dangerous actions - having module edit is not
+// enough on its own, matching the previous standalone "actions" permission axis.
+const SENSITIVE_ACTION_GRANTS = {
+  'hr.addEmployee': ['admin', 'hr'],
+  'payroll.process': ['admin', 'accountant'],
+  'payroll.delete': ['admin'],
+  'pipeline.approve': ['admin', 'sales_head', 'teams_head', 'team_leader'],
+  'backoffice.statusChange': ['admin', 'backoffice'],
+};
+
+const ACCESS_DEFAULT = expandWithChildren(MODULE_ACCESS_DEFAULT);
+const EDIT_ACCESS_DEFAULT = expandWithChildren(MODULE_EDIT_DEFAULT);
+
+Object.keys(ROLES).forEach((role) => {
+  Object.entries(SENSITIVE_ACTION_GRANTS).forEach(([key, grantedRoles]) => {
+    if (!grantedRoles.includes(role)) {
+      EDIT_ACCESS_DEFAULT[role] = (EDIT_ACCESS_DEFAULT[role] || []).filter((k) => k !== key);
+    }
+  });
+});
 
 // Matches how agents actually log call outcomes (from the working reference trackers), grouped
 // loosely positive -> follow-up -> not-reached -> negative. Order here drives the dropdown order
@@ -69,44 +170,19 @@ const ORDER_STATUS = ['New', 'E& In-process', 'On Hold', 'Activated', 'Closed', 
 // Modules that support bulk Import/Export of records (from the real Excel trackers). Kept as its
 // own axis from view/edit - a user can be able to see and edit a module's records one-by-one in
 // the UI without being allowed to bulk-import/export the underlying data.
-const IMPORT_EXPORT_MODULES = ['dsr', 'pipeline', 'backoffice'];
+const IMPORT_EXPORT_MODULES = ['dsr', 'pipeline', 'backoffice', 'hr'];
 
 // Nobody gets import/export by default except admin - it's a bulk data operation (can move a lot
 // of records/PII at once), so every other role has to be explicitly granted it per module via
 // Admin > Permissions rather than inheriting it from view/edit access.
-// UAE employment compliance statuses (HR / Employee profile).
-const ABSCONDING_STATUS = ['None', 'Reported', 'Cleared'];
-const LEGAL_CASE_STATUS = ['None', 'Pending', 'Resolved'];
-
-// Fine-grained permissions for specific dangerous/restricted actions that don't map cleanly to
-// "edit this module" - e.g. someone can see the Payroll module and its history without being
-// allowed to actually process or delete a run. A user without one of these never sees the
-// corresponding button at all (see middlewares/rbac.js requireAction + the client checks that
-// mirror it), not just get blocked after clicking.
-const ACTIONS = [
-  { key: 'hr.addEmployee', label: 'Add Employees', module: 'hr' },
-  { key: 'payroll.process', label: 'Process Payroll Runs', module: 'payroll' },
-  { key: 'payroll.delete', label: 'Delete Payroll Runs', module: 'payroll' },
-];
-const ACTION_KEYS = ACTIONS.map((a) => a.key);
-
-// Deliberately conservative: only admin + the role that already "owns" that module by default
-// gets the matching action out of the box. payroll.delete (destructive, no undo) is admin-only
-// until an admin explicitly grants it - unlike process, it was never possible before this existed
-// so there's no prior behavior to preserve.
-const ACTIONS_DEFAULT = {
-  admin: ACTION_KEYS,
-  sales_head: [],
-  teams_head: [],
-  team_leader: [],
-  agent: [],
-  backoffice: [],
-  accountant: ['payroll.process'],
-  hr: ['hr.addEmployee'],
-};
+// UAE employment compliance flags (HR / Employee profile) — simple Yes/No, not a status enum;
+// an optional supporting document can be attached whenever the answer is "Yes" (see docsSchema's
+// legalCaseDoc / abscondingMohreDoc / abscondingGdrfaDoc in models/User.js).
+const ABSCONDING_STATUS = ['No', 'Yes'];
+const LEGAL_CASE_STATUS = ['No', 'Yes'];
 
 const IMPORT_EXPORT_DEFAULT = {
-  admin: ['dsr', 'pipeline', 'backoffice'],
+  admin: ['dsr', 'pipeline', 'backoffice', 'hr'],
   sales_head: [],
   teams_head: [],
   team_leader: [],
@@ -119,7 +195,9 @@ const IMPORT_EXPORT_DEFAULT = {
 module.exports = {
   ROLES,
   CHAIN_ROLES,
+  PERMISSION_TREE,
   MODULES,
+  ALL_PERMISSION_KEYS,
   ACCESS_DEFAULT,
   EDIT_ACCESS_DEFAULT,
   CALL_STATUS,
@@ -131,7 +209,4 @@ module.exports = {
   IMPORT_EXPORT_DEFAULT,
   ABSCONDING_STATUS,
   LEGAL_CASE_STATUS,
-  ACTIONS,
-  ACTION_KEYS,
-  ACTIONS_DEFAULT,
 };

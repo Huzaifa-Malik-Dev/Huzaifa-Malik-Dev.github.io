@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Title, Group, Badge, Paper, Select, Modal, Stack, TextInput, Textarea, NumberInput, ActionIcon, SimpleGrid, Button, Tooltip, Indicator } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQueryClient } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { Pencil, MessageCircle } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import ImportExportBar from '../../components/ImportExportBar';
@@ -34,6 +34,7 @@ export default function BackofficePage() {
   const confirm = useConfirm();
   const openChat = useChat();
   const canEdit = user.editModules?.includes('backoffice');
+  const canChangeStatus = user.editModules?.includes('backoffice.statusChange');
   const [statusFilter, setStatusFilter] = useState(null);
   const [editRow, setEditRow] = useState(null);
 
@@ -65,7 +66,7 @@ export default function BackofficePage() {
     if (!ok) return;
     try {
       await updateOrderStatus(row._id, { status });
-      notifications.show({ color: 'dark', message: `${row.dsrNo} status changed to "${status}"` });
+      notifications.show({ color: 'green', message: `${row.dsrNo} status changed to "${status}"` });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not update', message: err.response?.data?.error || 'Something went wrong' });
@@ -85,7 +86,7 @@ export default function BackofficePage() {
   const handleEdit = async (values) => {
     try {
       await updateOrder(editRow._id, values);
-      notifications.show({ color: 'dark', message: 'Order updated' });
+      notifications.show({ color: 'green', message: 'Order updated' });
       setEditRow(null);
       refresh();
     } catch (err) {
@@ -107,7 +108,7 @@ export default function BackofficePage() {
         header: 'Status',
         cell: (info) => {
           const row = info.row.original;
-          if (!canEdit) return <Badge color={STATUS_COLOR[row.status] || 'gray'} variant="light">{row.status}</Badge>;
+          if (!canChangeStatus) return <Badge color={STATUS_COLOR[row.status] || 'gray'} variant="light">{row.status}</Badge>;
           return (
             <Select
               data={ORDER_STATUS}
@@ -149,7 +150,7 @@ export default function BackofficePage() {
         ),
       },
     ],
-    [canEdit, unreadCounts]
+    [canEdit, canChangeStatus, unreadCounts]
   );
 
   return (

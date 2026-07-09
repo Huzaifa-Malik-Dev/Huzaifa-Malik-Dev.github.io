@@ -5,9 +5,12 @@ const complianceSchema = new mongoose.Schema(
   {
     dob: String,
     nationality: String,
+    uid: String,
     passportNo: String,
     passportExpiry: String,
     visaCompany: String,
+    visaFileNumber: String,
+    visaIssue: String,
     visaExpiry: String,
     eid: String,
     eidIssue: String,
@@ -17,11 +20,11 @@ const complianceSchema = new mongoose.Schema(
     labourCardExpiry: String,
     insuranceIssue: String,
     insuranceExpiry: String,
-    legalCaseStatus: { type: String, enum: LEGAL_CASE_STATUS, default: 'None' },
+    legalCaseStatus: { type: String, enum: LEGAL_CASE_STATUS, default: 'No' },
     legalCaseNote: { type: String, default: '' },
-    abscondingMohre: { type: String, enum: ABSCONDING_STATUS, default: 'None' },
+    abscondingMohre: { type: String, enum: ABSCONDING_STATUS, default: 'No' },
     abscondingMohreNote: { type: String, default: '' },
-    abscondingGdrfa: { type: String, enum: ABSCONDING_STATUS, default: 'None' },
+    abscondingGdrfa: { type: String, enum: ABSCONDING_STATUS, default: 'No' },
     abscondingGdrfaNote: { type: String, default: '' },
   },
   { _id: false }
@@ -39,6 +42,9 @@ const docsSchema = new mongoose.Schema(
     labourCardImg: String,
     insuranceImgF: String,
     insuranceImgB: String,
+    legalCaseDoc: String,
+    abscondingMohreDoc: String,
+    abscondingGdrfaDoc: String,
   },
   { _id: false }
 );

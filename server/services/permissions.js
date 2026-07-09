@@ -1,5 +1,5 @@
 const Permission = require('../models/Permission');
-const { ACCESS_DEFAULT, EDIT_ACCESS_DEFAULT, IMPORT_EXPORT_DEFAULT, ACTIONS_DEFAULT } = require('../utils/constants');
+const { ACCESS_DEFAULT, EDIT_ACCESS_DEFAULT, IMPORT_EXPORT_DEFAULT } = require('../utils/constants');
 
 // In-memory cache of the single permissions doc — it's tiny and read on every request,
 // so we keep it in memory and refresh it whenever an admin edits it (see setPermissions).
@@ -13,7 +13,6 @@ async function loadPermissions() {
       byRole: ACCESS_DEFAULT,
       editByRole: EDIT_ACCESS_DEFAULT,
       importExportByRole: IMPORT_EXPORT_DEFAULT,
-      actionsByRole: ACTIONS_DEFAULT,
       userOverrides: {},
     });
   }
@@ -31,20 +30,29 @@ async function setPermissions(update) {
   return cache;
 }
 
-function canView(user, moduleKey) {
+// A nested key (e.g. 'hr.addEmployee') is capped by its parent module's own level - granting
+// the child directly can never give MORE access than the parent module allows, so "HR: None"
+// always means every HR sub-item is also effectively None, regardless of what's individually
+// stored for it. Recursing into the parent re-checks the exact same override/role list, so this
+// stays correct however the child ended up with a stray grant (stale data, direct DB edit, etc).
+function canView(user, key) {
   const perms = cache;
   if (!perms) return false;
   const override = perms.userOverrides?.[String(user._id)]?.view;
   const list = override || perms.byRole[user.role] || [];
-  return list.includes(moduleKey);
+  if (!list.includes(key)) return false;
+  const parentKey = key.includes('.') ? key.split('.')[0] : null;
+  return parentKey ? canView(user, parentKey) : true;
 }
 
-function canEdit(user, moduleKey) {
+function canEdit(user, key) {
   const perms = cache;
   if (!perms) return false;
   const override = perms.userOverrides?.[String(user._id)]?.edit;
   const list = override || perms.editByRole[user.role] || [];
-  return list.includes(moduleKey);
+  if (!list.includes(key)) return false;
+  const parentKey = key.includes('.') ? key.split('.')[0] : null;
+  return parentKey ? canEdit(user, parentKey) : true;
 }
 
 function canImportExport(user, moduleKey) {
@@ -55,12 +63,4 @@ function canImportExport(user, moduleKey) {
   return list.includes(moduleKey);
 }
 
-function canDoAction(user, actionKey) {
-  const perms = cache;
-  if (!perms) return false;
-  const override = perms.userOverrides?.[String(user._id)]?.actions;
-  const list = override || perms.actionsByRole?.[user.role] || [];
-  return list.includes(actionKey);
-}
-
-module.exports = { loadPermissions, getPermissions, setPermissions, canView, canEdit, canImportExport, canDoAction };
+module.exports = { loadPermissions, getPermissions, setPermissions, canView, canEdit, canImportExport };

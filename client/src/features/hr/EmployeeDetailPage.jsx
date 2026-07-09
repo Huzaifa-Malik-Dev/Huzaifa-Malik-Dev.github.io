@@ -1,78 +1,128 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Stack, TextInput, NumberInput, Select, Button, Divider, Title, Text, Group, FileButton, Badge,
-  SimpleGrid, Paper, Loader, Center, ActionIcon, Tooltip, Avatar,
+  SimpleGrid, Paper, Loader, Center, ActionIcon, Tooltip, Avatar, UnstyledButton, Modal, Image,
+  SegmentedControl,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { notifications } from '@mantine/notifications';
-import { ArrowLeft, Upload, Pencil, Eye, Camera } from 'lucide-react';
+import { notifications } from '../../utils/toast';
+import { ArrowLeft, Upload, Pencil, Eye, Camera, Image as ImageIcon, FileText } from 'lucide-react';
 import { fetchEmployee, updateEmployee, uploadEmployeeDoc } from '../../api/hr';
 import { useAuth } from '../../context/AuthContext';
 import { ROLE_LABELS } from '../../constants/nav';
 import { docHealth } from './docHealth';
 import { colorFor, initials } from '../../utils/avatar';
-
-const emptyCompliance = {
-  dob: '', nationality: '', passportNo: '', passportExpiry: '', visaCompany: '', visaExpiry: '',
-  eid: '', eidIssue: '', eidExpiry: '', labourCardNo: '', labourCardIssue: '', labourCardExpiry: '',
-  insuranceIssue: '', insuranceExpiry: '',
-  legalCaseStatus: 'None', legalCaseNote: '',
-  abscondingMohre: 'None', abscondingMohreNote: '',
-  abscondingGdrfa: 'None', abscondingGdrfaNote: '',
-};
+import { EMPTY_COMPLIANCE, LEGAL_CASE_STATUS, ABSCONDING_STATUS } from './complianceDefaults';
 
 const STATUS_OPTIONS = ['Active', 'Inactive', 'Frozen', 'Absconding'];
 const STATUS_COLOR = { Active: 'green', Inactive: 'gray', Frozen: 'blue', Absconding: 'red' };
-const LEGAL_CASE_STATUS = ['None', 'Pending', 'Resolved'];
-const ABSCONDING_STATUS = ['None', 'Reported', 'Cleared'];
 
-// One doc slot (No./Expiry + Front/Back image upload). imgFieldB is optional — Labour Card only
-// has one side, everything else (Passport/Visa/EID/Insurance) has both.
-function DocField({ label, dateProps, noProps, imgFieldF, imgFieldB, employeeId, imgPathF, imgPathB, canEdit, onUploaded }) {
-  const health = dateProps ? docHealth(dateProps.value) : null;
+const THUMB_SIZE = 200;
+const MAX_UPLOAD_MB = 5;
+const isPdfPath = (path) => /\.pdf(\?.*)?$/i.test(path || '');
+
+// A bordered slot for one document image — dashed border + "No image" placeholder when nothing's
+// uploaded yet (so a missing scan is visually obvious at a glance, not just an absent link), solid
+// border with a thumbnail once one exists. Images open in the shared in-app quick-view Modal on
+// click; PDFs open in a new tab instead since browsers already render those well on their own and
+// embedding a PDF viewer in a small modal isn't worth it.
+function DocThumb({ sideLabel, path, canEdit, onUpload, onPreview }) {
+  const url = path ? `${import.meta.env.VITE_API_URL}${path}` : null;
+  const pdf = isPdfPath(path);
+
+  return (
+    <Stack gap={6} align="center">
+      <Text size="xs" c="dimmed">{sideLabel}</Text>
+      <UnstyledButton
+        onClick={() => { if (!url) return; if (pdf) window.open(url, '_blank', 'noopener'); else onPreview(url); }}
+        style={{ cursor: url ? 'zoom-in' : 'default' }}
+      >
+        <Paper
+          withBorder
+          radius="md"
+          w={THUMB_SIZE}
+          h={THUMB_SIZE}
+          style={{
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderStyle: url ? 'solid' : 'dashed',
+          }}
+        >
+          {url ? (
+            pdf ? (
+              <Stack gap={4} align="center">
+                <FileText size={32} />
+                <Text size="xs" c="dimmed">PDF</Text>
+              </Stack>
+            ) : (
+              <img src={url} alt={sideLabel} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            )
+          ) : (
+            <Stack gap={4} align="center">
+              <ImageIcon size={32} color="var(--mantine-color-dimmed)" />
+              <Text size="xs" c="dimmed">No image</Text>
+            </Stack>
+          )}
+        </Paper>
+      </UnstyledButton>
+      {canEdit && (
+        <FileButton accept="image/png,image/jpeg,image/webp,application/pdf" onChange={onUpload}>
+          {(props) => <Button {...props} size="compact-xs" variant="light" leftSection={<Upload size={12} />}>{url ? 'Replace' : 'Upload'}</Button>}
+        </FileButton>
+      )}
+    </Stack>
+  );
+}
+
+// One document type, its own card — not a divider-separated block sharing a page-long stack with
+// every other document. Each is self-contained: title + health badge, its own text fields, and its
+// own Front/Back image slots, so nothing bleeds visually into the section above or below it.
+function DocSection({ title, healthDate, fields, imgFieldF, imgFieldB, employeeId, imgPathF, imgPathB, canEdit, onUploaded, onPreview }) {
+  const health = healthDate !== undefined ? docHealth(healthDate) : null;
 
   const uploadSide = async (field, sideLabel, file) => {
     if (!file) return;
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      notifications.show({ color: 'red', title: 'File too large', message: `${file.name} is over ${MAX_UPLOAD_MB}MB — please choose a smaller file.` });
+      return;
+    }
     try {
       await uploadEmployeeDoc(employeeId, field, file);
-      notifications.show({ color: 'dark', message: `${label} (${sideLabel}) uploaded` });
+      notifications.show({ color: 'green', message: `${title} (${sideLabel}) uploaded` });
       onUploaded();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Upload failed', message: err.response?.data?.error || 'Something went wrong' });
     }
   };
 
-  const side = (sideLabel, field, path) => (
-    <Stack gap={4}>
-      <Text size="xs" c="dimmed">{sideLabel}</Text>
-      <Group gap={6} wrap="nowrap">
-        {canEdit && (
-          <FileButton accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(file) => uploadSide(field, sideLabel, file)}>
-            {(props) => <Button {...props} size="compact-xs" variant="light" leftSection={<Upload size={12} />}>Upload</Button>}
-          </FileButton>
-        )}
-        {path && <Text component="a" href={`${import.meta.env.VITE_API_URL}${path}`} target="_blank" size="xs" c="blue">View</Text>}
-      </Group>
-    </Stack>
-  );
-
   return (
-    <Stack gap={4}>
-      <Group justify="space-between" align="flex-end">
-        <Text size="sm" fw={600}>{label}</Text>
+    <Paper withBorder p="md" radius="md">
+      <Group justify="space-between" mb="sm">
+        <Text size="sm" fw={700}>{title}</Text>
         {health && <Badge size="xs" color={health.color} variant="light">{health.label}</Badge>}
       </Group>
-      <Group grow>
-        {noProps && <TextInput label="No." size="xs" readOnly={!canEdit} {...noProps} />}
-        {dateProps && <TextInput type="date" label="Expiry" size="xs" readOnly={!canEdit} {...dateProps} />}
-      </Group>
-      <Group gap="lg">
-        {imgFieldF && side('Front', imgFieldF, imgPathF)}
-        {imgFieldB && side('Back', imgFieldB, imgPathB)}
-      </Group>
-    </Stack>
+      <Stack gap="sm">
+        <SimpleGrid cols={2}>
+          {fields.map((f) => (
+            <TextInput key={f.label} type={f.type} label={f.label} size="xs" readOnly={!canEdit} {...f.props} />
+          ))}
+        </SimpleGrid>
+        {(imgFieldF || imgFieldB) && (
+          <Group gap="xl">
+            {imgFieldF && (
+              <DocThumb sideLabel="Front" path={imgPathF} canEdit={canEdit} onUpload={(file) => uploadSide(imgFieldF, 'Front', file)} onPreview={onPreview} />
+            )}
+            {imgFieldB && (
+              <DocThumb sideLabel="Back" path={imgPathB} canEdit={canEdit} onUpload={(file) => uploadSide(imgFieldB, 'Back', file)} onPreview={onPreview} />
+            )}
+          </Group>
+        )}
+      </Stack>
+    </Paper>
   );
 }
 
@@ -90,12 +140,13 @@ export default function EmployeeDetailPage() {
 
   const { data, isLoading } = useQuery({ queryKey: ['hr', 'employee', id], queryFn: () => fetchEmployee(id) });
   const employee = data?.data;
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   const form = useForm({
     initialValues: {
       name: '', arabicName: '', desig: '', dept: '', email: '', phone: '',
       target: 0, salary: 0, join: '', status: 'Active',
-      compliance: emptyCompliance,
+      compliance: EMPTY_COMPLIANCE,
     },
   });
 
@@ -112,7 +163,7 @@ export default function EmployeeDetailPage() {
       salary: employee.salary || 0,
       join: employee.join || '',
       status: employee.status || (employee.active !== false ? 'Active' : 'Inactive'),
-      compliance: { ...emptyCompliance, ...(employee.compliance || {}) },
+      compliance: { ...EMPTY_COMPLIANCE, ...(employee.compliance || {}) },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee?._id]);
@@ -122,7 +173,7 @@ export default function EmployeeDetailPage() {
   const handleSubmit = async (values) => {
     try {
       await updateEmployee(id, values);
-      notifications.show({ color: 'dark', message: 'Employee updated' });
+      notifications.show({ color: 'green', message: 'Employee updated' });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not save', message: err.response?.data?.error || 'Something went wrong' });
@@ -137,9 +188,30 @@ export default function EmployeeDetailPage() {
 
   const handleUploadProfilePic = async (file) => {
     if (!file) return;
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      notifications.show({ color: 'red', title: 'File too large', message: `${file.name} is over ${MAX_UPLOAD_MB}MB — please choose a smaller file.` });
+      return;
+    }
     try {
       await uploadEmployeeDoc(employee._id, 'profilePic', file);
-      notifications.show({ color: 'dark', message: 'Profile picture updated' });
+      notifications.show({ color: 'green', message: 'Profile picture updated' });
+      refresh();
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Upload failed', message: err.response?.data?.error || 'Something went wrong' });
+    }
+  };
+
+  // Single optional supporting document (Legal Case / Absconding) — unlike the Front/Back pairs
+  // above, these are just one slot, uploaded only once the flag is set to "Yes".
+  const handleUploadSingleDoc = async (field, label, file) => {
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      notifications.show({ color: 'red', title: 'File too large', message: `${file.name} is over ${MAX_UPLOAD_MB}MB — please choose a smaller file.` });
+      return;
+    }
+    try {
+      await uploadEmployeeDoc(employee._id, field, file);
+      notifications.show({ color: 'green', message: `${label} uploaded` });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Upload failed', message: err.response?.data?.error || 'Something went wrong' });
@@ -209,91 +281,166 @@ export default function EmployeeDetailPage() {
               <TextInput label="Phone" readOnly={!editing} {...form.getInputProps('phone')} />
               <TextInput type="date" label="Date of Birth" readOnly={!editing} {...form.getInputProps('compliance.dob')} />
               <TextInput label="Nationality" readOnly={!editing} {...form.getInputProps('compliance.nationality')} />
+              <TextInput label="UID (Unified Number)" readOnly={!editing} {...form.getInputProps('compliance.uid')} />
             </SimpleGrid>
           </Paper>
 
+          <DocSection
+            title="Passport"
+            healthDate={form.values.compliance.passportExpiry}
+            fields={[
+              { label: 'No.', props: form.getInputProps('compliance.passportNo') },
+              { label: 'Expiry', type: 'date', props: form.getInputProps('compliance.passportExpiry') },
+            ]}
+            imgFieldF="passportImgF"
+            imgFieldB="passportImgB"
+            employeeId={employee._id}
+            imgPathF={docs.passportImgF}
+            imgPathB={docs.passportImgB}
+            canEdit={editing}
+            onUploaded={refresh}
+            onPreview={setPreviewUrl}
+          />
+
+          <DocSection
+            title="Visa"
+            healthDate={form.values.compliance.visaExpiry}
+            fields={[
+              { label: 'Sponsor Company', props: form.getInputProps('compliance.visaCompany') },
+              { label: 'Visa File Number', props: form.getInputProps('compliance.visaFileNumber') },
+              { label: 'Issue Date', type: 'date', props: form.getInputProps('compliance.visaIssue') },
+              { label: 'Expiry', type: 'date', props: form.getInputProps('compliance.visaExpiry') },
+            ]}
+            imgFieldF="visaImgF"
+            imgFieldB="visaImgB"
+            employeeId={employee._id}
+            imgPathF={docs.visaImgF}
+            imgPathB={docs.visaImgB}
+            canEdit={editing}
+            onUploaded={refresh}
+            onPreview={setPreviewUrl}
+          />
+
+          <DocSection
+            title="Emirates ID"
+            healthDate={form.values.compliance.eidExpiry}
+            fields={[
+              { label: 'No.', props: form.getInputProps('compliance.eid') },
+              { label: 'Issue Date', type: 'date', props: form.getInputProps('compliance.eidIssue') },
+              { label: 'Expiry', type: 'date', props: form.getInputProps('compliance.eidExpiry') },
+            ]}
+            imgFieldF="eidImgF"
+            imgFieldB="eidImgB"
+            employeeId={employee._id}
+            imgPathF={docs.eidImgF}
+            imgPathB={docs.eidImgB}
+            canEdit={editing}
+            onUploaded={refresh}
+            onPreview={setPreviewUrl}
+          />
+
+          <DocSection
+            title="Labour Card (MOHRE)"
+            healthDate={form.values.compliance.labourCardExpiry}
+            fields={[
+              { label: 'No.', props: form.getInputProps('compliance.labourCardNo') },
+              { label: 'Issue Date', type: 'date', props: form.getInputProps('compliance.labourCardIssue') },
+              { label: 'Expiry', type: 'date', props: form.getInputProps('compliance.labourCardExpiry') },
+            ]}
+            imgFieldF="labourCardImg"
+            employeeId={employee._id}
+            imgPathF={docs.labourCardImg}
+            canEdit={editing}
+            onUploaded={refresh}
+            onPreview={setPreviewUrl}
+          />
+
+          <DocSection
+            title="Insurance"
+            healthDate={form.values.compliance.insuranceExpiry}
+            fields={[
+              { label: 'Issue Date', type: 'date', props: form.getInputProps('compliance.insuranceIssue') },
+              { label: 'Expiry', type: 'date', props: form.getInputProps('compliance.insuranceExpiry') },
+            ]}
+            imgFieldF="insuranceImgF"
+            imgFieldB="insuranceImgB"
+            employeeId={employee._id}
+            imgPathF={docs.insuranceImgF}
+            imgPathB={docs.insuranceImgB}
+            canEdit={editing}
+            onUploaded={refresh}
+            onPreview={setPreviewUrl}
+          />
+
           <Paper withBorder p="md" radius="md">
-            <Stack gap="md">
-              <Divider label="Passport" labelPosition="left" />
-              <DocField
-                label="Passport"
-                noProps={form.getInputProps('compliance.passportNo')}
-                dateProps={form.getInputProps('compliance.passportExpiry')}
-                imgFieldF="passportImgF"
-                imgFieldB="passportImgB"
-                employeeId={employee._id}
-                imgPathF={docs.passportImgF}
-                imgPathB={docs.passportImgB}
-                canEdit={editing}
-                onUploaded={refresh}
-              />
+            <Divider label="Legal Case" labelPosition="left" mb="sm" />
+            <Stack gap="sm">
+              <div>
+                <Text size="xs" c="dimmed" mb={4}>Has an active legal case?</Text>
+                <SegmentedControl data={LEGAL_CASE_STATUS} disabled={!editing} {...form.getInputProps('compliance.legalCaseStatus')} />
+              </div>
+              {form.values.compliance.legalCaseStatus === 'Yes' && (
+                <>
+                  <TextInput label="Note" readOnly={!editing} {...form.getInputProps('compliance.legalCaseNote')} />
+                  <Group>
+                    <DocThumb
+                      sideLabel="Document (optional)"
+                      path={docs.legalCaseDoc}
+                      canEdit={editing}
+                      onUpload={(file) => handleUploadSingleDoc('legalCaseDoc', 'Legal Case document', file)}
+                      onPreview={setPreviewUrl}
+                    />
+                  </Group>
+                </>
+              )}
+            </Stack>
+          </Paper>
 
-              <Divider label="Visa" labelPosition="left" />
-              <TextInput label="Sponsor Company" size="xs" readOnly={!editing} {...form.getInputProps('compliance.visaCompany')} />
-              <DocField
-                label="Visa"
-                dateProps={form.getInputProps('compliance.visaExpiry')}
-                imgFieldF="visaImgF"
-                imgFieldB="visaImgB"
-                employeeId={employee._id}
-                imgPathF={docs.visaImgF}
-                imgPathB={docs.visaImgB}
-                canEdit={editing}
-                onUploaded={refresh}
-              />
+          <Paper withBorder p="md" radius="md">
+            <Divider label="Absconding — MOHRE" labelPosition="left" mb="sm" />
+            <Stack gap="sm">
+              <div>
+                <Text size="xs" c="dimmed" mb={4}>Reported absconding to MOHRE?</Text>
+                <SegmentedControl data={ABSCONDING_STATUS} disabled={!editing} {...form.getInputProps('compliance.abscondingMohre')} />
+              </div>
+              {form.values.compliance.abscondingMohre === 'Yes' && (
+                <>
+                  <TextInput label="Note" readOnly={!editing} {...form.getInputProps('compliance.abscondingMohreNote')} />
+                  <Group>
+                    <DocThumb
+                      sideLabel="Document (optional)"
+                      path={docs.abscondingMohreDoc}
+                      canEdit={editing}
+                      onUpload={(file) => handleUploadSingleDoc('abscondingMohreDoc', 'Absconding MOHRE document', file)}
+                      onPreview={setPreviewUrl}
+                    />
+                  </Group>
+                </>
+              )}
+            </Stack>
+          </Paper>
 
-              <Divider label="Emirates ID" labelPosition="left" />
-              <DocField
-                label="Emirates ID"
-                noProps={form.getInputProps('compliance.eid')}
-                dateProps={form.getInputProps('compliance.eidExpiry')}
-                imgFieldF="eidImgF"
-                imgFieldB="eidImgB"
-                employeeId={employee._id}
-                imgPathF={docs.eidImgF}
-                imgPathB={docs.eidImgB}
-                canEdit={editing}
-                onUploaded={refresh}
-              />
-
-              <Divider label="Labour Card (MOHRE)" labelPosition="left" />
-              <DocField
-                label="Labour Card"
-                noProps={form.getInputProps('compliance.labourCardNo')}
-                dateProps={form.getInputProps('compliance.labourCardExpiry')}
-                imgFieldF="labourCardImg"
-                employeeId={employee._id}
-                imgPathF={docs.labourCardImg}
-                canEdit={editing}
-                onUploaded={refresh}
-              />
-
-              <Divider label="Insurance" labelPosition="left" />
-              <DocField
-                label="Insurance"
-                dateProps={form.getInputProps('compliance.insuranceExpiry')}
-                imgFieldF="insuranceImgF"
-                imgFieldB="insuranceImgB"
-                employeeId={employee._id}
-                imgPathF={docs.insuranceImgF}
-                imgPathB={docs.insuranceImgB}
-                canEdit={editing}
-                onUploaded={refresh}
-              />
-
-              <Divider label="Legal Case" labelPosition="left" />
-              <SimpleGrid cols={2}>
-                <Select label="Status" data={LEGAL_CASE_STATUS} readOnly={!editing} {...form.getInputProps('compliance.legalCaseStatus')} />
-                <TextInput label="Note" readOnly={!editing} {...form.getInputProps('compliance.legalCaseNote')} />
-              </SimpleGrid>
-
-              <Divider label="Absconding" labelPosition="left" />
-              <SimpleGrid cols={2}>
-                <Select label="MOHRE Status" data={ABSCONDING_STATUS} readOnly={!editing} {...form.getInputProps('compliance.abscondingMohre')} />
-                <TextInput label="MOHRE Note" readOnly={!editing} {...form.getInputProps('compliance.abscondingMohreNote')} />
-                <Select label="GDRFA Status" data={ABSCONDING_STATUS} readOnly={!editing} {...form.getInputProps('compliance.abscondingGdrfa')} />
-                <TextInput label="GDRFA Note" readOnly={!editing} {...form.getInputProps('compliance.abscondingGdrfaNote')} />
-              </SimpleGrid>
+          <Paper withBorder p="md" radius="md">
+            <Divider label="Absconding — GDRFA" labelPosition="left" mb="sm" />
+            <Stack gap="sm">
+              <div>
+                <Text size="xs" c="dimmed" mb={4}>Reported absconding to GDRFA?</Text>
+                <SegmentedControl data={ABSCONDING_STATUS} disabled={!editing} {...form.getInputProps('compliance.abscondingGdrfa')} />
+              </div>
+              {form.values.compliance.abscondingGdrfa === 'Yes' && (
+                <>
+                  <TextInput label="Note" readOnly={!editing} {...form.getInputProps('compliance.abscondingGdrfaNote')} />
+                  <Group>
+                    <DocThumb
+                      sideLabel="Document (optional)"
+                      path={docs.abscondingGdrfaDoc}
+                      canEdit={editing}
+                      onUpload={(file) => handleUploadSingleDoc('abscondingGdrfaDoc', 'Absconding GDRFA document', file)}
+                      onPreview={setPreviewUrl}
+                    />
+                  </Group>
+                </>
+              )}
             </Stack>
           </Paper>
 
@@ -303,14 +450,19 @@ export default function EmployeeDetailPage() {
         <Stack gap="md" style={{ flex: '1 1 260px', minWidth: 240, maxWidth: 280 }}>
           <Paper withBorder p="md" radius="md">
             <Stack align="center" gap="sm">
-              <Avatar
-                size={140}
-                radius="md"
-                color={colorFor(employee.name)}
-                src={docs.profilePic ? `${import.meta.env.VITE_API_URL}${docs.profilePic}` : null}
+              <UnstyledButton
+                onClick={() => docs.profilePic && setPreviewUrl(`${import.meta.env.VITE_API_URL}${docs.profilePic}`)}
+                style={{ cursor: docs.profilePic ? 'zoom-in' : 'default' }}
               >
-                {!docs.profilePic && initials(employee.name)}
-              </Avatar>
+                <Avatar
+                  size={140}
+                  radius="md"
+                  color={colorFor(employee.name)}
+                  src={docs.profilePic ? `${import.meta.env.VITE_API_URL}${docs.profilePic}` : null}
+                >
+                  {!docs.profilePic && initials(employee.name)}
+                </Avatar>
+              </UnstyledButton>
               {editing && (
                 <FileButton accept="image/png,image/jpeg,image/webp" onChange={handleUploadProfilePic}>
                   {(props) => (
@@ -350,6 +502,10 @@ export default function EmployeeDetailPage() {
         </Stack>
         </Group>
       </form>
+
+      <Modal opened={!!previewUrl} onClose={() => setPreviewUrl(null)} size="lg" centered title="Document Preview">
+        {previewUrl && <Image src={previewUrl} fit="contain" mah="75vh" radius="sm" />}
+      </Modal>
     </Stack>
   );
 }

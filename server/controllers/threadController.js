@@ -28,6 +28,17 @@ function stakeholdersOf(dsr, pipeline, order) {
   return [...new Set(ids.filter(Boolean).map(String))];
 }
 
+// Restricts thread access to: admins, anyone stamped anywhere in this record's hierarchy
+// (agent/TL/Teams Head/Sales Head), and Back Office once an order exists.
+function assertThreadAccess(user, dsr, pipeline, order) {
+  if (user.role === 'admin') return;
+  if (order && user.role === 'backoffice') return;
+  const stakeholders = stakeholdersOf(dsr, pipeline, order);
+  if (!stakeholders.includes(String(user._id))) {
+    throw new AppError('You do not have access to this conversation', 403);
+  }
+}
+
 // People this specific record's conversation is relevant to - the agent + their whole
 // management chain, plus Back Office once an order exists. Used both to notify and to
 // populate the "tag someone" chips client-side (agents/TLs can't hit the admin-only /users list).
@@ -47,6 +58,7 @@ async function getThread(req, res, next) {
     const { dsrNo } = req.params;
     const { entries, dsr, pipeline, order } = await systemEntries(dsrNo);
     if (!dsr && !pipeline && !order) throw new AppError('No record found for this reference number', 404);
+    assertThreadAccess(req.user, dsr, pipeline, order);
 
     const thread = await Thread.findOne({ dsrNo }).populate('messages.userId', 'name').populate('messages.mentions', 'name').lean();
     const human = (thread?.messages || []).map((m) => ({
@@ -106,6 +118,7 @@ async function postMessage(req, res, next) {
 
     const { dsr, pipeline, order } = await systemEntries(dsrNo);
     if (!dsr && !pipeline && !order) throw new AppError('No record found for this reference number', 404);
+    assertThreadAccess(req.user, dsr, pipeline, order);
 
     const thread = await Thread.findOneAndUpdate(
       { dsrNo },
@@ -134,6 +147,7 @@ async function postAttachment(req, res, next) {
 
     const { dsr, pipeline, order } = await systemEntries(dsrNo);
     if (!dsr && !pipeline && !order) throw new AppError('No record found for this reference number', 404);
+    assertThreadAccess(req.user, dsr, pipeline, order);
 
     const thread = await Thread.findOneAndUpdate(
       { dsrNo },

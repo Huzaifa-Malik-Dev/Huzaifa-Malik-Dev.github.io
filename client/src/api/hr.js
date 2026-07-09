@@ -13,3 +13,12 @@ export const uploadEmployeeDoc = (id, field, file) => {
     .post(`/users/${id}/upload/${field}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
     .then((r) => r.data);
 };
+
+export const fetchComplianceSummary = () => api.get('/users/compliance-summary').then((r) => r.data);
+
+export const exportEmployees = (params) => api.get('/users/export', { params, responseType: 'blob' }).then((r) => r.data);
+export const importEmployees = (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return api.post('/users/import', form).then((r) => r.data);
+};

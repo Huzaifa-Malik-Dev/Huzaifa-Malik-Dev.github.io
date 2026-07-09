@@ -2,20 +2,19 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Stack, Title, Text, Paper, SegmentedControl, Select, Group, Badge, Button, Loader, Center,
-  SimpleGrid, NavLink, Tooltip, Switch, Alert,
+  SimpleGrid, NavLink, Tooltip, Switch, Divider, ActionIcon,
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { notifications } from '@mantine/notifications';
-import { TriangleAlert } from 'lucide-react';
+import { notifications } from '../../utils/toast';
+import { TriangleAlert, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   fetchPermissions,
   updateRolePermission,
+  resetRolePermission,
   updateUserOverride,
   clearUserOverride,
   updateRoleImportExport,
   updateUserImportExportOverride,
-  updateRoleAction,
-  updateUserActionOverride,
 } from '../../api/admin';
 import { fetchEmployees } from '../../api/hr';
 import { NAV_ITEMS, ROLE_LABELS } from '../../constants/nav';
@@ -24,9 +23,25 @@ import { useAuth } from '../../context/AuthContext';
 const ROLE_OPTIONS = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }));
 const LEVEL_RANK = { none: 0, view: 1, edit: 2 };
 
-function levelFor(view, edit, moduleKey) {
-  if (edit?.includes(moduleKey)) return 'edit';
-  if (view?.includes(moduleKey)) return 'view';
+// What each module's Import/Export switch actually grants, in plain terms — shown as a caption
+// under the toggle so an admin doesn't have to guess what turning it on lets someone do.
+const IMPORT_EXPORT_HELP = {
+  dsr: 'Bulk upload/download the DSR calling list as a spreadsheet (.xlsx).',
+  pipeline: 'Bulk upload/download Sales Pipeline deals as a spreadsheet (.xlsx).',
+  backoffice: 'Bulk upload/download Back Office orders as a spreadsheet (.xlsx).',
+  hr: "Bulk upload/download every employee's data and their uploaded documents (passport, visa, etc.) as a ZIP file.",
+};
+
+// Every permission key, module and nested tab/action alike, flattened with a label and its
+// parent's label - used for the over-provisioning check and generic lookups.
+const ALL_ITEMS = NAV_ITEMS.flatMap((item) => [
+  { key: item.key, label: item.label, parentLabel: null },
+  ...(item.children || []).map((c) => ({ key: c.key, label: c.label, parentLabel: item.label })),
+]);
+
+function levelFor(view, edit, key) {
+  if (edit?.includes(key)) return 'edit';
+  if (view?.includes(key)) return 'view';
   return 'none';
 }
 
@@ -45,6 +60,13 @@ export default function PermissionsPage() {
   const [personSearch, setPersonSearch] = useState('');
   const [debouncedSearch] = useDebouncedValue(personSearch, 300);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [expanded, setExpanded] = useState(() => new Set());
+  const toggleExpanded = (key) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
 
   const permsQuery = useQuery({ queryKey: ['admin', 'permissions'], queryFn: fetchPermissions });
   const perms = permsQuery.data?.data;
@@ -61,27 +83,25 @@ export default function PermissionsPage() {
   const effectiveEdit = mode === 'role' ? perms?.editByRole?.[role] : (override?.edit ?? perms?.editByRole?.[selectedUser?.role]);
   const effectiveImportExport =
     mode === 'role' ? perms?.importExportByRole?.[role] : (override?.importExport ?? perms?.importExportByRole?.[selectedUser?.role]);
-  const effectiveActions =
-    mode === 'role' ? perms?.actionsByRole?.[role] : (override?.actions ?? perms?.actionsByRole?.[selectedUser?.role]);
 
   // Over-provisioning check (person mode only): compare this person's override against what
-  // their role would normally get, across all three axes, so an accidental extra grant is
-  // visible instead of silently sitting there.
+  // their role would normally get, across every module AND nested tab/action key, so an
+  // accidental extra grant (including a narrow one like "Delete Payroll Runs") is visible
+  // instead of silently sitting there.
   const roleDefaultView = perms?.byRole?.[selectedUser?.role] || [];
   const roleDefaultEdit = perms?.editByRole?.[selectedUser?.role] || [];
   const roleDefaultIE = perms?.importExportByRole?.[selectedUser?.role] || [];
-  const roleDefaultActions = perms?.actionsByRole?.[selectedUser?.role] || [];
   const extraModuleAccess =
     mode === 'person' && override
-      ? NAV_ITEMS.filter((item) => {
+      ? ALL_ITEMS.filter((item) => {
           const overrideLevel = levelFor(override.view, override.edit, item.key);
           const roleLevel = levelFor(roleDefaultView, roleDefaultEdit, item.key);
           return LEVEL_RANK[overrideLevel] > LEVEL_RANK[roleLevel];
         })
       : [];
   const extraImportExport = mode === 'person' && override ? extras(override.importExport, roleDefaultIE) : [];
-  const extraActions = mode === 'person' && override ? extras(override.actions, roleDefaultActions) : [];
-  const hasExtras = extraModuleAccess.length > 0 || extraImportExport.length > 0 || extraActions.length > 0;
+  const extraKeySet = useMemo(() => new Set(extraModuleAccess.map((i) => i.key)), [extraModuleAccess]);
+  const extraImportExportSet = useMemo(() => new Set(extraImportExport), [extraImportExport]);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['admin', 'permissions'] });
 
@@ -90,11 +110,11 @@ export default function PermissionsPage() {
     try {
       if (mode === 'role') {
         await updateRolePermission({ role, module: moduleKey, level });
-        notifications.show({ color: 'dark', message: `${ROLE_LABELS[role]} access to ${moduleLabel} set to "${level}"` });
+        notifications.show({ color: 'green', message: `${ROLE_LABELS[role]} access to ${moduleLabel} set to "${level}"` });
       } else {
         if (!selectedUser) return;
         await updateUserOverride({ userId: selectedUser._id, module: moduleKey, level, role: selectedUser.role });
-        notifications.show({ color: 'dark', message: `${selectedUser.name}'s access to ${moduleLabel} set to "${level}"` });
+        notifications.show({ color: 'green', message: `${selectedUser.name}'s access to ${moduleLabel} set to "${level}"` });
       }
       refresh();
     } catch (err) {
@@ -107,28 +127,11 @@ export default function PermissionsPage() {
     try {
       if (mode === 'role') {
         await updateRoleImportExport({ role, module: moduleKey, enabled });
-        notifications.show({ color: 'dark', message: `${ROLE_LABELS[role]} Import/Export for ${moduleLabel} ${enabled ? 'enabled' : 'disabled'}` });
+        notifications.show({ color: 'green', message: `${ROLE_LABELS[role]} Import/Export for ${moduleLabel} ${enabled ? 'enabled' : 'disabled'}` });
       } else {
         if (!selectedUser) return;
         await updateUserImportExportOverride({ userId: selectedUser._id, module: moduleKey, enabled, role: selectedUser.role });
-        notifications.show({ color: 'dark', message: `${selectedUser.name}'s Import/Export for ${moduleLabel} ${enabled ? 'enabled' : 'disabled'}` });
-      }
-      refresh();
-    } catch (err) {
-      notifications.show({ color: 'red', title: 'Could not update', message: err.response?.data?.error || 'Something went wrong' });
-    }
-  };
-
-  const handleActionChange = async (actionKey, enabled) => {
-    const actionLabel = perms?.actionDefs?.find((a) => a.key === actionKey)?.label || actionKey;
-    try {
-      if (mode === 'role') {
-        await updateRoleAction({ role, action: actionKey, enabled });
-        notifications.show({ color: 'dark', message: `${ROLE_LABELS[role]} — "${actionLabel}" ${enabled ? 'enabled' : 'disabled'}` });
-      } else {
-        if (!selectedUser) return;
-        await updateUserActionOverride({ userId: selectedUser._id, action: actionKey, enabled, role: selectedUser.role });
-        notifications.show({ color: 'dark', message: `${selectedUser.name} — "${actionLabel}" ${enabled ? 'enabled' : 'disabled'}` });
+        notifications.show({ color: 'green', message: `${selectedUser.name}'s Import/Export for ${moduleLabel} ${enabled ? 'enabled' : 'disabled'}` });
       }
       refresh();
     } catch (err) {
@@ -140,7 +143,17 @@ export default function PermissionsPage() {
     if (!selectedUser) return;
     try {
       await clearUserOverride(selectedUser._id);
-      notifications.show({ color: 'dark', message: `${selectedUser.name} reset to role default` });
+      notifications.show({ color: 'green', message: `${selectedUser.name} reset to role default` });
+      refresh();
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Could not reset', message: err.response?.data?.error || 'Something went wrong' });
+    }
+  };
+
+  const handleResetRole = async () => {
+    try {
+      await resetRolePermission(role);
+      notifications.show({ color: 'green', message: `${ROLE_LABELS[role]} reset to system default` });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not reset', message: err.response?.data?.error || 'Something went wrong' });
@@ -170,7 +183,14 @@ export default function PermissionsPage() {
       <Group align="flex-end">
         <SegmentedControl value={mode} onChange={setMode} data={[{ value: 'role', label: 'Role' }, { value: 'person', label: 'Person' }]} />
         {mode === 'role' ? (
-          <Select data={ROLE_OPTIONS} value={role} onChange={setRole} w={240} />
+          <Group align="flex-end">
+            <Select data={ROLE_OPTIONS} value={role} onChange={setRole} w={240} />
+            <Tooltip label="Resets every module and nested permission for this role back to the shipped default" position="top">
+              <Button size="xs" variant="light" color="gray" onClick={handleResetRole}>
+                Reset to role default
+              </Button>
+            </Tooltip>
+          </Group>
         ) : (
           <Group align="flex-end">
             <Select
@@ -211,28 +231,16 @@ export default function PermissionsPage() {
         </Text>
       )}
 
-      {mode === 'person' && selectedUser && hasExtras && (
-        <Alert color="yellow" variant="light" icon={<TriangleAlert size={16} />} title={`${selectedUser.name} has MORE access than the ${ROLE_LABELS[selectedUser.role]} default`}>
-          <Stack gap={2}>
-            {extraModuleAccess.map((item) => (
-              <Text key={item.key} size="xs">• {item.label}: {levelFor(override.view, override.edit, item.key)}</Text>
-            ))}
-            {extraImportExport.map((moduleKey) => (
-              <Text key={moduleKey} size="xs">• {NAV_ITEMS.find((i) => i.key === moduleKey)?.label || moduleKey}: bulk import/export</Text>
-            ))}
-            {extraActions.map((actionKey) => (
-              <Text key={actionKey} size="xs">• {perms?.actionDefs?.find((a) => a.key === actionKey)?.label || actionKey}</Text>
-            ))}
-          </Stack>
-        </Alert>
-      )}
-
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
         <Paper withBorder p="md" radius="md">
           <Stack gap="xs">
             {(mode === 'role' || selectedUser) &&
-              NAV_ITEMS.map((item) => {
+              NAV_ITEMS.map((item, idx) => {
                 const locked = item.key === 'admin' && isOwnAdminRow;
+                const hasChildren = (item.children || []).length > 0;
+                const isOpen = expanded.has(item.key);
+                const moduleLevel = levelFor(effectiveView, effectiveEdit, item.key);
+                const itemHasExtra = mode === 'person' && extraKeySet.has(item.key);
                 const control = (
                   <SegmentedControl
                     size="xs"
@@ -247,19 +255,72 @@ export default function PermissionsPage() {
                   />
                 );
                 return (
-                  <Group key={item.key} justify="space-between">
-                    <Group gap="xs">
-                      <item.icon size={16} />
-                      <Text size="sm">{item.label}</Text>
+                  <div key={item.key}>
+                    {idx > 0 && <Divider my={6} />}
+                    <Group justify="space-between">
+                      <Group gap={4}>
+                        {hasChildren ? (
+                          <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => toggleExpanded(item.key)} aria-label="Toggle sections">
+                            {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          </ActionIcon>
+                        ) : (
+                          <div style={{ width: 28 }} />
+                        )}
+                        <item.icon size={16} />
+                        <Text size="sm" fw={600}>{item.label}</Text>
+                        {itemHasExtra && (
+                          <Tooltip label={`${selectedUser.name} has MORE access here than the ${ROLE_LABELS[selectedUser.role]} default`}>
+                            <TriangleAlert size={18} color="var(--mantine-color-yellow-6)" />
+                          </Tooltip>
+                        )}
+                      </Group>
+                      {locked ? (
+                        <Tooltip label="You can't change your own admin access - ask another admin to change this for you">
+                          <div>{control}</div>
+                        </Tooltip>
+                      ) : (
+                        control
+                      )}
                     </Group>
-                    {locked ? (
-                      <Tooltip label="You can't change your own admin access - ask another admin to change this for you">
-                        <div>{control}</div>
-                      </Tooltip>
-                    ) : (
-                      control
+                    {hasChildren && isOpen && (
+                      <Stack gap={6} mt={6} pl={32}>
+                          {item.children.map((child) => {
+                            const childHasExtra = mode === 'person' && extraKeySet.has(child.key);
+                            // A child can never exceed its parent module's own level - "None" here
+                            // is shown/forced whenever the module itself is None, and "Edit" is only
+                            // selectable once the module is Edit, so the control can't display or
+                            // create the contradictory "module: None, child: Edit" state.
+                            const rawChildLevel = levelFor(effectiveView, effectiveEdit, child.key);
+                            const childLevel = LEVEL_RANK[rawChildLevel] > LEVEL_RANK[moduleLevel] ? moduleLevel : rawChildLevel;
+                            return (
+                              <Group key={child.key} justify="space-between">
+                                <Group gap={4}>
+                                  <Text size="xs" c="dimmed">{child.label}</Text>
+                                  {childHasExtra && (
+                                    <Tooltip label={`${selectedUser.name} has MORE access here than the ${ROLE_LABELS[selectedUser.role]} default`}>
+                                      <TriangleAlert size={18} color="var(--mantine-color-yellow-6)" />
+                                    </Tooltip>
+                                  )}
+                                </Group>
+                                <Tooltip label="Limited by this module's own access level above" disabled={moduleLevel === 'edit'}>
+                                  <SegmentedControl
+                                    size="xs"
+                                    value={childLevel}
+                                    onChange={(level) => handleChange(child.key, level)}
+                                    disabled={moduleLevel === 'none'}
+                                    data={[
+                                      { value: 'none', label: 'None' },
+                                      { value: 'view', label: 'View' },
+                                      { value: 'edit', label: 'Edit', disabled: moduleLevel !== 'edit' },
+                                    ]}
+                                  />
+                                </Tooltip>
+                              </Group>
+                            );
+                          })}
+                      </Stack>
                     )}
-                  </Group>
+                  </div>
                 );
               })}
             {mode === 'person' && !selectedUser && <Text size="sm" c="dimmed">Search and select a person above.</Text>}
@@ -271,41 +332,27 @@ export default function PermissionsPage() {
                   Separate from View/Edit above — grants uploading/downloading spreadsheets of records, not just using the module.
                 </Text>
                 {NAV_ITEMS.filter((item) => perms.importExportModules.includes(item.key)).map((item) => (
-                  <Group key={item.key} justify="space-between">
-                    <Group gap="xs">
-                      <item.icon size={16} />
-                      <Text size="sm">{item.label}</Text>
-                    </Group>
+                  <Group key={item.key} justify="space-between" align="flex-start" wrap="nowrap">
+                    <div>
+                      <Group gap="xs">
+                        <item.icon size={16} />
+                        <Text size="sm">{item.label}</Text>
+                        {mode === 'person' && extraImportExportSet.has(item.key) && (
+                          <Tooltip label={`${selectedUser.name} has MORE access here than the ${ROLE_LABELS[selectedUser.role]} default`}>
+                            <TriangleAlert size={18} color="var(--mantine-color-yellow-6)" />
+                          </Tooltip>
+                        )}
+                      </Group>
+                      {IMPORT_EXPORT_HELP[item.key] && (
+                        <Text size="xs" c="dimmed" ml={24}>{IMPORT_EXPORT_HELP[item.key]}</Text>
+                      )}
+                    </div>
                     <Switch
                       checked={!!effectiveImportExport?.includes(item.key)}
                       onChange={(e) => handleImportExportChange(item.key, e.currentTarget.checked)}
                     />
                   </Group>
                 ))}
-              </>
-            )}
-
-            {(mode === 'role' || selectedUser) && perms?.actionDefs?.length > 0 && (
-              <>
-                <Text size="xs" fw={600} c="dimmed" mt="sm">Specific Actions</Text>
-                <Text size="xs" c="dimmed" mb={4}>
-                  Narrower than View/Edit — e.g. seeing Payroll history without being able to process or delete a run. Without one of these, the matching button is hidden, not just blocked.
-                </Text>
-                {perms.actionDefs.map((def) => {
-                  const ModuleIcon = NAV_ITEMS.find((i) => i.key === def.module)?.icon;
-                  return (
-                    <Group key={def.key} justify="space-between">
-                      <Group gap="xs">
-                        {ModuleIcon && <ModuleIcon size={16} />}
-                        <Text size="sm">{def.label}</Text>
-                      </Group>
-                      <Switch
-                        checked={!!effectiveActions?.includes(def.key)}
-                        onChange={(e) => handleActionChange(def.key, e.currentTarget.checked)}
-                      />
-                    </Group>
-                  );
-                })}
               </>
             )}
           </Stack>

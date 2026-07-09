@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Table, Button, Group, Modal, Stack, TextInput, Textarea, Text, Badge, ActionIcon, Tooltip } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { Plus, Pencil, Power } from 'lucide-react';
 import { fetchSegments, createSegment, updateSegment } from '../../api/segments';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -29,7 +29,7 @@ export default function SegmentsTab({ canEdit }) {
   const handleCreate = async (values) => {
     try {
       await createSegment(values);
-      notifications.show({ color: 'dark', message: 'Segment created' });
+      notifications.show({ color: 'green', message: 'Segment created' });
       setCreateOpen(false);
       form.reset();
       refresh();
@@ -41,7 +41,7 @@ export default function SegmentsTab({ canEdit }) {
   const handleEdit = async (values) => {
     try {
       await updateSegment(editRow._id, values);
-      notifications.show({ color: 'dark', message: 'Segment updated' });
+      notifications.show({ color: 'green', message: 'Segment updated' });
       setEditRow(null);
       refresh();
     } catch (err) {
@@ -61,7 +61,7 @@ export default function SegmentsTab({ canEdit }) {
     if (!ok) return;
     try {
       await updateSegment(row._id, { active: !row.active });
-      notifications.show({ color: 'dark', message: `Segment ${row.active ? 'deactivated' : 'activated'}` });
+      notifications.show({ color: 'green', message: `Segment ${row.active ? 'deactivated' : 'activated'}` });
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not update', message: err.response?.data?.error || 'Something went wrong' });

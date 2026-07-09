@@ -30,6 +30,7 @@ async function getSummary(req, res, next) {
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
+    const monthStartStr = monthStart.toISOString().slice(0, 10);
 
     const [
       dsrTotal,
@@ -50,8 +51,11 @@ async function getSummary(req, res, next) {
       Pipeline.aggregate([{ $match: { ...scope, approval: 'pending_tl' } }, { $group: { _id: null, count: { $sum: 1 }, value: { $sum: '$mrc' } } }]),
       Pipeline.aggregate([{ $match: { ...scope, stage: { $ne: '0% - Lost' } } }, { $group: { _id: null, total: { $sum: '$mrc' } } }]),
       Order.aggregate([{ $match: scope }, { $group: { _id: '$status', count: { $sum: 1 }, value: { $sum: '$mrc' } } }]),
+      // Filtered by actDate (the real-world activation date) rather than createdAt (record
+      // insert time) — a backfilled or edited order must count in the month it actually
+      // activated, not the month it happened to be saved to the DB.
       Order.aggregate([
-        { $match: { ...scope, status: 'Activated', createdAt: { $gte: monthStart } } },
+        { $match: { ...scope, status: 'Activated', actDate: { $gte: monthStartStr } } },
         { $group: { _id: null, count: { $sum: 1 }, mrc: { $sum: '$mrc' }, commission: { $sum: '$commission' } } },
       ]),
       getTargetSum(user),

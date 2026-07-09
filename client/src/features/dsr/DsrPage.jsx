@@ -1,15 +1,16 @@
 import { useMemo, useRef, useState } from 'react';
 import {
   Title, Group, Button, Badge, Paper, Select, Modal, Stack, TextInput, Textarea, ActionIcon, Tooltip,
-  Autocomplete, SimpleGrid, Divider, Indicator,
+  Autocomplete, SimpleGrid, Divider, Indicator, CopyButton, Text,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDebouncedValue } from '@mantine/hooks';
-import { notifications } from '@mantine/notifications';
-import { Plus, ArrowRightCircle, Pencil, MessageCircle, Calendar, Building2, MapPin, Phone, Mail, User } from 'lucide-react';
+import { notifications } from '../../utils/toast';
+import { Plus, ArrowRightCircle, Pencil, MessageCircle, Calendar, Building2, MapPin, Phone, Mail, User, Copy, Check } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import ImportExportBar from '../../components/ImportExportBar';
+import FlexDateInput from '../../components/FlexDateInput';
 import { usePagedList } from '../../hooks/usePagedList';
 import { useThreadUnreadCounts } from '../../hooks/useNotifications';
 import { fetchDsrList, createDsr, updateDsrStatus, updateDsr, exportDsr, importDsr, fetchDsrAutocomplete } from '../../api/dsr';
@@ -28,6 +29,14 @@ const CALL_STATUS_GROUPS = [
 ];
 
 const CALL_STATUS = CALL_STATUS_GROUPS.flatMap((g) => g.items);
+
+// Loose on purpose - just enough to catch the two most common data-entry accidents (a phone
+// number that lost digits, e.g. Excel dropping a leading 0, and a typo'd email) without
+// rejecting valid international formats.
+const dsrValidation = {
+  contactNo: (v) => (v.replace(/\D/g, '').length >= 7 ? null : 'Looks too short for a phone number'),
+  email: (v) => (!v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : 'Not a valid email address'),
+};
 
 const STATUS_COLOR = {
   Interested: 'green',
@@ -59,20 +68,32 @@ function DsrFormFields({ form, companySlot }) {
     <Stack gap="md">
       <div>
         <Divider label="When & Outcome" labelPosition="left" mb="sm" />
-        <SimpleGrid cols={2}>
-          <TextInput type="date" label="Date" required leftSection={<Calendar size={16} />} {...form.getInputProps('date')} />
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <FlexDateInput label="Date" required value={form.values.date} onChange={(v) => form.setFieldValue('date', v)} />
           <Select label="Status" data={CALL_STATUS_GROUPS} required searchable {...form.getInputProps('status')} />
         </SimpleGrid>
       </div>
 
       <div>
-        <Divider label="Company & Contact" labelPosition="left" mb="sm" />
-        <SimpleGrid cols={2}>
+        <Divider label="Where" labelPosition="left" mb="sm" />
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
           {companySlot}
-          <TextInput label="Building" leftSection={<MapPin size={16} />} {...form.getInputProps('building')} />
+          <TextInput
+            label="Building"
+            description="Optional — the tower/building you visited, if this was a door-to-door call"
+            placeholder="e.g. Bin Dasmal Tower"
+            leftSection={<MapPin size={16} />}
+            {...form.getInputProps('building')}
+          />
+        </SimpleGrid>
+      </div>
+
+      <div>
+        <Divider label="Who to Contact" labelPosition="left" mb="sm" />
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <TextInput label="Contact Person" leftSection={<User size={16} />} {...form.getInputProps('customer')} />
           <TextInput label="Contact No." required leftSection={<Phone size={16} />} {...form.getInputProps('contactNo')} />
           <TextInput label="Email" leftSection={<Mail size={16} />} {...form.getInputProps('email')} />
-          <TextInput label="Customer" leftSection={<User size={16} />} {...form.getInputProps('customer')} />
         </SimpleGrid>
       </div>
 
@@ -111,8 +132,11 @@ export default function DsrPage() {
   });
   const suggestions = suggestQuery.data?.data || [];
 
+  const companyInputRef = useRef(null);
+
   const form = useForm({
     initialValues: { date: new Date().toISOString().slice(0, 10), company: '', building: '', contactNo: '', email: '', customer: '', status: 'Interested', remarks: '' },
+    validate: dsrValidation,
   });
 
   const applyCompanySuggestion = (companyName) => {
@@ -126,8 +150,19 @@ export default function DsrPage() {
     }
   };
 
+  // Same company + same number already on file for this contact - not blocked (a genuine
+  // repeat follow-up call is normal), just flagged so an accidental double-entry is noticed
+  // before saving instead of after.
+  const possibleDuplicate =
+    form.values.company.trim().length > 1 &&
+    form.values.contactNo.trim().length > 0 &&
+    suggestions.some(
+      (s) => s.company.toLowerCase() === form.values.company.trim().toLowerCase() && s.contactNo === form.values.contactNo.trim()
+    );
+
   const editForm = useForm({
     initialValues: { date: '', company: '', building: '', contactNo: '', email: '', customer: '', status: 'Interested', remarks: '' },
+    validate: dsrValidation,
   });
 
   const openEdit = (row) => {
@@ -147,7 +182,7 @@ export default function DsrPage() {
   const handleEdit = async (values) => {
     try {
       await updateDsr(editRow._id, values);
-      notifications.show({ color: 'dark', message: 'DSR updated' });
+      notifications.show({ color: 'green', message: 'DSR updated' });
       setEditRow(null);
       queryClient.invalidateQueries({ queryKey: ['dsr'] });
       list.refetch();
@@ -166,9 +201,12 @@ export default function DsrPage() {
         // the agent can log the next call immediately without reopening the form.
         form.setValues({ date: values.date, company: '', building: '', contactNo: '', email: '', customer: '', status: 'Interested', remarks: '' });
         setCompanyQuery('');
-        notifications.show({ color: 'dark', message: `${values.company} logged — ready for the next call` });
+        notifications.show({ color: 'green', message: `${values.company} logged — ready for the next call` });
+        // Cursor back in Company so the next call can be typed immediately, no click required -
+        // this is the whole point of "Save & Log Another" for someone doing dozens a day.
+        companyInputRef.current?.focus();
       } else {
-        notifications.show({ color: 'dark', message: 'DSR logged' });
+        notifications.show({ color: 'green', message: 'DSR logged' });
         setCreateOpen(false);
         form.reset();
       }
@@ -180,7 +218,7 @@ export default function DsrPage() {
   const handleStatusChange = async (id, status) => {
     try {
       await updateDsrStatus(id, { status });
-      notifications.show({ color: 'dark', message: `Status updated to "${status}"` });
+      notifications.show({ color: 'green', message: `Status updated to "${status}"` });
       queryClient.invalidateQueries({ queryKey: ['dsr'] });
       list.refetch();
     } catch (err) {
@@ -198,7 +236,7 @@ export default function DsrPage() {
     if (!ok) return;
     try {
       await convertToPipeline({ dsrId: dsr._id, price: 100, qty: 1 });
-      notifications.show({ color: 'dark', message: `${dsr.dsrNo} moved to pipeline` });
+      notifications.show({ color: 'green', message: `${dsr.dsrNo} moved to pipeline` });
       queryClient.invalidateQueries({ queryKey: ['dsr'] });
       list.refetch();
     } catch (err) {
@@ -210,9 +248,51 @@ export default function DsrPage() {
     () => [
       { accessorKey: 'dsrNo', header: 'DSR No.' },
       { accessorKey: 'date', header: 'Date' },
-      { accessorKey: 'company', header: 'Company' },
-      { accessorKey: 'contactNo', header: 'Contact No.' },
-      { accessorKey: 'customer', header: 'Customer' },
+      {
+        // Building folded in as dimmed subtext under Company (like Sales Pipeline's Product/Category)
+        // instead of its own column — it was previously captured on the form but never shown
+        // anywhere, so agents had no way to tell it mattered. This is its first real surface.
+        id: 'company',
+        header: 'Company',
+        cell: (info) => {
+          const row = info.row.original;
+          return (
+            <div>
+              <Text size="sm">{row.company || '—'}</Text>
+              {row.building && <Text size="xs" c="dimmed">{row.building}</Text>}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'contactNo',
+        header: 'Contact No.',
+        cell: (info) => {
+          const value = info.getValue();
+          if (!value) return '-';
+          return (
+            <Group gap={6} wrap="nowrap">
+              <Text size="sm">{value}</Text>
+              <CopyButton value={value}>
+                {({ copied, copy }) => (
+                  <Tooltip label={copied ? 'Copied' : 'Copy number'}>
+                    <ActionIcon
+                      variant="subtle"
+                      color={copied ? 'teal' : 'gray'}
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); copy(); }}
+                      aria-label="Copy contact number"
+                    >
+                      {copied ? <Check size={12} /> : <Copy size={12} />}
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+              </CopyButton>
+            </Group>
+          );
+        },
+      },
+      { accessorKey: 'customer', header: 'Contact Person' },
       {
         accessorKey: 'agentId',
         header: 'Agent',
@@ -328,6 +408,7 @@ export default function DsrPage() {
             form={form}
             companySlot={
               <Autocomplete
+                ref={companyInputRef}
                 label="Company"
                 placeholder="Start typing — past companies suggest"
                 required
@@ -339,6 +420,11 @@ export default function DsrPage() {
               />
             }
           />
+          {possibleDuplicate && (
+            <Text size="xs" c="yellow.6" mt={4}>
+              You've already logged a call for this company &amp; number before — check it isn't a duplicate entry.
+            </Text>
+          )}
           <Group grow mt="md">
             <Button type="submit" variant="light" onClick={() => { keepOpenRef.current = true; }}>
               Save &amp; Log Another

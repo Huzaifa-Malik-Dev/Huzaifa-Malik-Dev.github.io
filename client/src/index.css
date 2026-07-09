@@ -13,11 +13,17 @@ body {
   color-scheme: light !important;
   --table-striped-color: var(--mantine-color-gray-0);
   --panel-bg: var(--mantine-color-white);
+  /* Neutral (non-success, non-error) toasts use the opposite of the page background so they
+     never blend in, regardless of which theme is active. */
+  --toast-neutral-bg: #1a1b1e;
+  --toast-neutral-color: #f1f3f5;
 }
 :root[data-mantine-color-scheme='dark'] {
   color-scheme: dark !important;
   --table-striped-color: var(--mantine-color-dark-6);
   --panel-bg: var(--mantine-color-dark-6);
+  --toast-neutral-bg: #f1f3f5;
+  --toast-neutral-color: #1a1b1e;
 }
 
 #root {

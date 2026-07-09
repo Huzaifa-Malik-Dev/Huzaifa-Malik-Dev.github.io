@@ -70,11 +70,26 @@ export default function PipelinePage() {
       { accessorKey: 'dsrNo', header: 'DSR No.' },
       { accessorKey: 'company', header: 'Company' },
       { accessorKey: 'customer', header: 'Customer' },
-      { accessorKey: 'cat', header: 'Category' },
-      { accessorKey: 'product', header: 'Product' },
+      {
+        // Category folded into the Product column (as dimmed subtext) instead of its own
+        // column — the two are almost always read together, and one fewer column leaves more
+        // horizontal room for the rest on narrower laptop screens.
+        id: 'product',
+        header: 'Product',
+        cell: (info) => {
+          const row = info.row.original;
+          return (
+            <div>
+              <Text size="sm">{row.product || '—'}</Text>
+              {row.cat && <Text size="xs" c="dimmed">{row.cat}</Text>}
+            </div>
+          );
+        },
+      },
       { accessorKey: 'qty', header: 'Qty' },
+      // Annual is just MRC × 12 — showing both is redundant column space; Annual still shows in
+      // the deal detail modal for anyone who wants it broken out.
       { accessorKey: 'mrc', header: 'MRC', cell: (info) => AED(info.getValue()) },
-      { accessorKey: 'annual', header: 'Annual', cell: (info) => AED(info.getValue()) },
       { accessorKey: 'agentId', header: 'Agent', cell: (info) => info.getValue()?.name || '-' },
       {
         accessorKey: 'stage',

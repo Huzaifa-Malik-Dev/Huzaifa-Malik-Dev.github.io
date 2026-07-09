@@ -5,7 +5,7 @@ import {
   Avatar, Divider, Box, Tooltip, FileButton,
 } from '@mantine/core';
 import { Send, MessageCircle, AtSign, Paperclip, FileText, Download } from 'lucide-react';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../utils/toast';
 import { fetchThread, postThreadMessage, postThreadAttachment } from '../api/threads';
 import { useAuth } from '../context/AuthContext';
 import { colorFor, initials } from '../utils/avatar';
@@ -23,10 +23,19 @@ function dayLabel(ts) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
 }
 
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function highlightMentions(text, people) {
-  let result = text;
+  let result = escapeHtml(text);
   people.forEach((p) => {
-    const re = new RegExp(`@${p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z])`, 'gi');
+    const re = new RegExp(`@${escapeHtml(p.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z])`, 'gi');
     result = result.replace(re, (m) => `<span style="color:var(--mantine-color-red-4);font-weight:700">${m}</span>`);
   });
   return result;

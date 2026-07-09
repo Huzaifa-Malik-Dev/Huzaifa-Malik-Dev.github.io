@@ -1,5 +1,5 @@
 const AppError = require('../utils/AppError');
-const { canView, canEdit, canImportExport, canDoAction } = require('../services/permissions');
+const { canView, canEdit, canImportExport } = require('../services/permissions');
 
 // requireModule('dsr') gates by view access; requireModule('dsr', { edit: true }) gates by edit access.
 // The client hides buttons for UX only — this is the actual enforcement.
@@ -39,12 +39,13 @@ function requireRole(...roles) {
   };
 }
 
-// requireAction('payroll.process') gates a specific dangerous/restricted action, independent of
-// whether the user can otherwise view/edit that module.
+// requireAction('payroll.process') gates a specific dangerous/restricted action key - same
+// None/View/Edit tri-state as any other permission key, just nested under its parent module in
+// Admin > Permissions rather than being its own top-level module.
 function requireAction(actionKey) {
   return (req, res, next) => {
     try {
-      if (!canDoAction(req.user, actionKey)) throw new AppError('You do not have permission to do this', 403);
+      if (!canEdit(req.user, actionKey)) throw new AppError('You do not have permission to do this', 403);
       next();
     } catch (err) {
       next(err);

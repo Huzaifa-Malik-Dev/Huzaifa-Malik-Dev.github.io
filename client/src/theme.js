@@ -38,5 +38,20 @@ export const theme = createTheme({
     // data-mantine-color-scheme, so use that instead.
     Paper: { styles: { root: { backgroundColor: 'var(--panel-bg)' } } },
     Card: { styles: { root: { backgroundColor: 'var(--panel-bg)' } } },
+    // Toast palette: success = green, error = red (both readable on any background already).
+    // Neutral/info toasts (color="gray") get the OPPOSITE of the current theme's background
+    // instead of a same-toned gray, so they never blend into the page like a same-color toast
+    // would - see --toast-neutral-bg/--toast-neutral-color in index.css.
+    Notification: {
+      styles: (_theme, props) =>
+        props.color === 'gray'
+          ? {
+              root: { backgroundColor: 'var(--toast-neutral-bg)' },
+              title: { color: 'var(--toast-neutral-color)' },
+              description: { color: 'var(--toast-neutral-color)' },
+              closeButton: { color: 'var(--toast-neutral-color)' },
+            }
+          : {},
+    },
   },
 });

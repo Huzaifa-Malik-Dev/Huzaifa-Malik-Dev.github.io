@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const Segment = require('../models/Segment');
+const Product = require('../models/Product');
 const AppError = require('../utils/AppError');
 
 const createSchema = z.object({
@@ -59,6 +60,9 @@ async function remove(req, res, next) {
   try {
     const segment = await Segment.findById(req.params.id);
     if (!segment) throw new AppError('Segment not found', 404);
+
+    const inUse = await Product.countDocuments({ segmentId: segment._id });
+    if (inUse) throw new AppError(`Cannot delete — ${inUse} product${inUse === 1 ? '' : 's'} still reference this segment`, 400);
 
     await segment.deleteOne();
     res.json({ data: { _id: req.params.id } });

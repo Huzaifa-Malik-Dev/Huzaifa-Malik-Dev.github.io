@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Table, Button, Group, Modal, Stack, TextInput, Select, NumberInput, Text, Badge } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
+import { notifications } from '../../utils/toast';
 import { Plus, ArrowLeftRight } from 'lucide-react';
 import { fetchAccounts, createAccount, recordTransaction, fetchAccountTransactions } from '../../api/accounting';
 
@@ -35,7 +35,7 @@ export default function ChartOfAccountsTab({ canEdit }) {
   const handleCreateAccount = async (values) => {
     try {
       await createAccount(values);
-      notifications.show({ color: 'dark', message: 'Account created' });
+      notifications.show({ color: 'green', message: 'Account created' });
       setNewAccountOpen(false);
       accountForm.reset();
       refreshAccounts();
@@ -47,7 +47,7 @@ export default function ChartOfAccountsTab({ canEdit }) {
   const handleRecordTx = async (values) => {
     try {
       await recordTransaction(values);
-      notifications.show({ color: 'dark', message: 'Transaction recorded' });
+      notifications.show({ color: 'green', message: 'Transaction recorded' });
       setRecordTxOpen(false);
       txForm.reset();
       refreshAccounts();
