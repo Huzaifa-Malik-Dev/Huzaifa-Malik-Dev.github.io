@@ -1,0 +1,25 @@
+body {
+  margin: 0;
+}
+
+/* Several Mantine internals (Table stripe color, some AppShell surfaces) use
+   the native CSS light-dark() function, which resolves off the browser's
+   `color-scheme` property. If that property isn't pinned to the app's actual
+   toggle state, light-dark() silently falls back to the OS/browser dark-mode
+   preference instead - causing isolated elements to ignore the in-app toggle.
+   Force it explicitly, with !important so stylesheet injection order (Mantine
+   injects component CSS at runtime) can't win the cascade back. */
+:root[data-mantine-color-scheme='light'] {
+  color-scheme: light !important;
+  --table-striped-color: var(--mantine-color-gray-0);
+  --panel-bg: var(--mantine-color-white);
+}
+:root[data-mantine-color-scheme='dark'] {
+  color-scheme: dark !important;
+  --table-striped-color: var(--mantine-color-dark-6);
+  --panel-bg: var(--mantine-color-dark-6);
+}
+
+#root {
+  min-height: 100svh;
+}

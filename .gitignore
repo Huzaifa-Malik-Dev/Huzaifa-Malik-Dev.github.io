@@ -1,2 +1,20 @@
 ./.agents/*
 ./.claude/*
+
+# dependencies
+node_modules/
+
+# env
+.env
+.env.local
+
+# build output
+client/dist/
+
+# uploads (local file storage)
+server/uploads/*
+!server/uploads/.gitkeep
+
+# logs
+*.log
+npm-debug.log*
