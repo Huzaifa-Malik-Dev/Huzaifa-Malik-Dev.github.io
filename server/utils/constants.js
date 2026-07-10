@@ -54,6 +54,7 @@ const PERMISSION_TREE = [
       { key: 'payroll.ledger', label: 'Employee Ledger' },
       { key: 'payroll.process', label: 'Process Payroll Runs' },
       { key: 'payroll.delete', label: 'Delete Payroll Runs' },
+      { key: 'payroll.commissionTiers', label: 'Commission Rules' },
     ],
   },
   {
@@ -99,7 +100,10 @@ const MODULE_EDIT_DEFAULT = {
   agent: ['dsr', 'pipeline'],
   backoffice: ['backoffice'],
   accountant: ['payroll', 'accounting'],
-  hr: [],
+  // 'payroll' here only unlocks payroll.commissionTiers below - every other payroll edit action
+  // (process/delete/ledger) stays admin/accountant-only via SENSITIVE_ACTION_GRANTS stripping it
+  // back out for any role not explicitly listed there.
+  hr: ['payroll'],
 };
 
 // A role that can view/edit a module gets every tab under it by default too (admin can narrow
@@ -125,6 +129,8 @@ const SENSITIVE_ACTION_GRANTS = {
   'hr.addEmployee': ['admin', 'hr'],
   'payroll.process': ['admin', 'accountant'],
   'payroll.delete': ['admin'],
+  'payroll.ledger': ['admin', 'accountant'],
+  'payroll.commissionTiers': ['admin', 'hr'],
   'pipeline.approve': ['admin', 'sales_head', 'teams_head', 'team_leader'],
   'backoffice.statusChange': ['admin', 'backoffice'],
 };

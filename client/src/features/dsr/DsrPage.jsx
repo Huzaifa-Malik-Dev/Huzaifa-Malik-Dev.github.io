@@ -320,7 +320,7 @@ export default function DsrPage() {
       { accessorKey: 'remarks', header: 'Remarks', truncate: true, truncateWidth: 240 },
       {
         id: 'action',
-        header: '',
+        header: 'Actions',
         cell: (info) => {
           const row = info.row.original;
           const isOwner = canEdit && String(row.agentId?._id) === String(user.id);
@@ -370,7 +370,7 @@ export default function DsrPage() {
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={3}>DSR — Agent Calling List</Title>
+        <Title order={1} size="h3">DSR — Agent Calling List</Title>
         <Group gap="sm">
           <ImportExportBar
             moduleKey="dsr"

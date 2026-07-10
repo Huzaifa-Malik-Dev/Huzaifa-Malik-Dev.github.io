@@ -79,14 +79,14 @@ export default function SegmentsTab({ canEdit }) {
         )}
       </Group>
 
-      <Table.ScrollContainer minWidth={600}>
+      <Table.ScrollContainer minWidth={600} scrollAreaProps={{ viewportProps: { tabIndex: 0, role: 'region', 'aria-label': 'Table, scrollable horizontally' } }}>
         <Table striped highlightOnHover verticalSpacing="sm">
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Name</Table.Th>
               <Table.Th>Description</Table.Th>
               <Table.Th>Status</Table.Th>
-              {canEdit && <Table.Th></Table.Th>}
+              {canEdit && <Table.Th>Actions</Table.Th>}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>

@@ -9,14 +9,20 @@ import { useForm } from '@mantine/form';
 import { notifications } from '../../utils/toast';
 import {
   ArrowLeft, User, AtSign, Lock, Briefcase, Building2, Users, Calendar, Target, Wallet, Mail, Phone,
-  Globe, IdCard, Plane, Fingerprint, Landmark, ShieldCheck, Upload, X,
+  Globe, IdCard, Plane, Fingerprint, Landmark, ShieldCheck, Upload, X, Percent,
 } from 'lucide-react';
 import { createEmployee, fetchEmployees, uploadEmployeeDoc } from '../../api/hr';
 import { useAuth } from '../../context/AuthContext';
 import { ROLE_LABELS } from '../../constants/nav';
-import { EMPTY_COMPLIANCE, LEGAL_CASE_STATUS, ABSCONDING_STATUS } from './complianceDefaults';
+import { EMPTY_COMPLIANCE, LEGAL_CASE_STATUS, ABSCONDING_STATUS, isUnderage } from './complianceDefaults';
+import { employeeUrlId } from './employeeUrl';
 
 const ROLE_OPTIONS = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }));
+const PAY_TYPE_OPTIONS = [
+  { value: 'salary', label: 'Salary Only' },
+  { value: 'commission', label: 'Commission Only' },
+  { value: 'salary_commission', label: 'Salary + Commission' },
+];
 const defUsername = (name) => name.toLowerCase().replace(/[^a-z]/g, '');
 const LAST_STEP = 6;
 const MAX_UPLOAD_MB = 5;
@@ -76,7 +82,7 @@ export default function AddEmployeePage() {
   const form = useForm({
     initialValues: {
       name: '', arabicName: '', username: '', password: '', role: 'agent', email: '', phone: '',
-      desig: '', dept: '', reportsTo: null, target: 0, salary: 0, join: new Date().toISOString().slice(0, 10),
+      desig: '', dept: '', reportsTo: null, payType: 'salary', target: '', salary: '', join: new Date().toISOString().slice(0, 10),
       compliance: EMPTY_COMPLIANCE,
     },
     validate: {
@@ -95,7 +101,12 @@ export default function AddEmployeePage() {
 
   const handleSubmit = async (values) => {
     try {
-      const res = await createEmployee(values);
+      const payload = {
+        ...values,
+        target: values.target === '' ? 0 : values.target,
+        salary: values.salary === '' ? 0 : values.salary,
+      };
+      const res = await createEmployee(payload);
       const newId = res.data._id;
 
       // Documents can only upload once the employee record (and its ID) exists, so this happens
@@ -116,7 +127,7 @@ export default function AddEmployeePage() {
 
       notifications.show({ color: 'green', message: `${values.name} added — employee ID ${res.data.employeeId}` });
       queryClient.invalidateQueries({ queryKey: ['hr'] });
-      navigate(`/hr/${newId}?edit=1`);
+      navigate(`/hr/employees/${employeeUrlId(res.data.employeeId)}?edit=1`);
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not add employee', message: err.response?.data?.error || 'Something went wrong' });
     }
@@ -135,10 +146,10 @@ export default function AddEmployeePage() {
     return (
       <Stack gap="md" maw={700}>
         <Group>
-          <ActionIcon variant="subtle" onClick={() => navigate('/hr')}>
+          <ActionIcon variant="subtle" onClick={() => navigate(-1)}>
             <ArrowLeft size={18} />
           </ActionIcon>
-          <Title order={3}>Add Employee</Title>
+          <Title order={1} size="h3">Add Employee</Title>
         </Group>
         <Text c="dimmed">You don't have permission to add employees.</Text>
       </Stack>
@@ -151,10 +162,10 @@ export default function AddEmployeePage() {
   return (
     <Stack gap="md" maw={900} mx="auto">
       <Group>
-        <ActionIcon variant="subtle" onClick={() => navigate('/hr')}>
+        <ActionIcon variant="subtle" onClick={() => navigate(-1)}>
           <ArrowLeft size={18} />
         </ActionIcon>
-        <Title order={3}>Add Employee</Title>
+        <Title order={1} size="h3">Add Employee</Title>
       </Group>
 
       <Paper withBorder p="xl" radius="md">
@@ -195,8 +206,25 @@ export default function AddEmployeePage() {
                     {...form.getInputProps('reportsTo')}
                   />
                   <TextInput type="date" label="Join Date" leftSection={<Calendar size={16} />} {...form.getInputProps('join')} />
+                  <Select
+                    label="Pay Type"
+                    data={PAY_TYPE_OPTIONS}
+                    leftSection={<Percent size={16} />}
+                    {...form.getInputProps('payType')}
+                    onChange={(v) => {
+                      form.setFieldValue('payType', v);
+                      if (v === 'commission') form.setFieldValue('salary', 0);
+                    }}
+                  />
                   <NumberInput label="Monthly Target (AED)" min={0} leftSection={<Target size={16} />} {...form.getInputProps('target')} />
-                  <NumberInput label="Salary (AED)" min={0} leftSection={<Wallet size={16} />} {...form.getInputProps('salary')} />
+                  <NumberInput
+                    label="Salary (AED)"
+                    min={0}
+                    leftSection={<Wallet size={16} />}
+                    disabled={form.values.payType === 'commission'}
+                    description={form.values.payType === 'commission' ? 'Not used for Commission Only pay' : undefined}
+                    {...form.getInputProps('salary')}
+                  />
                 </SimpleGrid>
               </Stack>
             </Stepper.Step>
@@ -206,7 +234,12 @@ export default function AddEmployeePage() {
                 <SimpleGrid cols={2}>
                   <TextInput label="Email" leftSection={<Mail size={16} />} {...form.getInputProps('email')} />
                   <TextInput label="Phone" leftSection={<Phone size={16} />} {...form.getInputProps('phone')} />
-                  <TextInput type="date" label="Date of Birth" leftSection={<Calendar size={16} />} {...c('dob')} />
+                  <div>
+                    <TextInput type="date" label="Date of Birth" leftSection={<Calendar size={16} />} {...c('dob')} />
+                    {isUnderage(form.values.compliance.dob) && (
+                      <Text size="xs" c="yellow.6" mt={4}>Employee is under 18 years old</Text>
+                    )}
+                  </div>
                   <TextInput label="Nationality" leftSection={<Globe size={16} />} {...c('nationality')} />
                   <TextInput label="UID (Unified Number)" leftSection={<IdCard size={16} />} {...c('uid')} />
                 </SimpleGrid>
@@ -330,6 +363,7 @@ export default function AddEmployeePage() {
                   <Text size="sm"><b>Department:</b> {form.values.dept || '—'}</Text>
                   <Text size="sm"><b>Reports To:</b> {managerLabel || 'None (top of chain)'}</Text>
                   <Text size="sm"><b>Join Date:</b> {form.values.join || '—'}</Text>
+                  <Text size="sm"><b>Pay Type:</b> {PAY_TYPE_OPTIONS.find((o) => o.value === form.values.payType)?.label}</Text>
                   <Text size="sm"><b>Monthly Target:</b> AED {Number(form.values.target || 0).toLocaleString()}</Text>
                   <Text size="sm"><b>Salary:</b> AED {Number(form.values.salary || 0).toLocaleString()}</Text>
                 </SimpleGrid>

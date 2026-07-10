@@ -81,7 +81,7 @@ export default function PipelineDealPanel({ dealId }) {
 
   const editForm = useForm({
     initialValues: {
-      cat: '', product: '', sr: '', price: 0, qty: 1, stage: '10%- Prospect',
+      cat: '', product: '', sr: '', price: '', qty: 1, stage: '10%- Prospect',
       email: '', startedDate: '', expectedCloseDate: '', director: '', directorInvolvement: '', remarks: '',
     },
   });
@@ -89,7 +89,7 @@ export default function PipelineDealPanel({ dealId }) {
   useEffect(() => {
     if (deal) {
       editForm.setValues({
-        cat: deal.cat, product: deal.product, sr: deal.sr || '', price: deal.price, qty: deal.qty, stage: deal.stage,
+        cat: deal.cat, product: deal.product, sr: deal.sr || '', price: deal.price || '', qty: deal.qty, stage: deal.stage,
         email: deal.email || '', startedDate: deal.startedDate || '', expectedCloseDate: deal.expectedCloseDate || '',
         director: deal.director || '', directorInvolvement: deal.directorInvolvement || '', remarks: deal.remarks,
       });
@@ -123,7 +123,7 @@ export default function PipelineDealPanel({ dealId }) {
       if (!ok) return;
     }
     try {
-      await updatePipeline(deal._id, values);
+      await updatePipeline(deal._id, { ...values, price: values.price === '' ? 0 : values.price });
       notifications.show({ color: 'green', message: 'Deal updated' });
       refresh();
     } catch (err) {

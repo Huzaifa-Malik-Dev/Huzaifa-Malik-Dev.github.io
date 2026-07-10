@@ -31,12 +31,17 @@ export default function ExpensesTab({ canEdit }) {
   const employees = employeesQuery.data?.data || [];
 
   const form = useForm({
-    initialValues: { category: 'Rent', amount: 0, date: new Date().toISOString().slice(0, 10), account: '', note: '', breakdown: [] },
+    initialValues: { category: 'Rent', amount: '', date: new Date().toISOString().slice(0, 10), account: '', note: '', breakdown: [] },
   });
 
   const handleCreate = async (values) => {
     try {
-      const payload = { ...values, breakdown: values.category === 'Salaries' ? values.breakdown : [] };
+      const payload = {
+        ...values,
+        breakdown: values.category === 'Salaries'
+          ? values.breakdown.map((line) => ({ ...line, amount: line.amount === '' ? 0 : line.amount }))
+          : [],
+      };
       await createExpense(payload);
       notifications.show({ color: 'green', message: 'Expense recorded' });
       setCreateOpen(false);
@@ -126,7 +131,7 @@ export default function ExpensesTab({ canEdit }) {
                 <Button
                   size="xs"
                   variant="light"
-                  onClick={() => form.insertListItem('breakdown', { employee: '', amount: 0, note: '' })}
+                  onClick={() => form.insertListItem('breakdown', { employee: '', amount: '', note: '' })}
                 >
                   + Add Employee
                 </Button>

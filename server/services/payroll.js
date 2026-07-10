@@ -3,32 +3,96 @@ const Order = require('../models/Order');
 const LedgerEntry = require('../models/LedgerEntry');
 const PayrollRun = require('../models/PayrollRun');
 const PayrollLine = require('../models/PayrollLine');
+const CommissionTier = require('../models/CommissionTier');
 const Expense = require('../models/Expense');
 const Account = require('../models/Account');
 const AccountTx = require('../models/AccountTx');
 const { postAccountTx } = require('./accounting');
 const AppError = require('../utils/AppError');
 
+// Same "achievement %" concept as MIS (server/controllers/misController.js's buildRollup), but
+// role-aware so a Team Leader/Teams Head/Sales Head can also be put on commission against their
+// team's performance, not just individual agents:
+//   - agent: "achieved" is their own Activated-order MRC for the month.
+//   - any manager role: "achieved" is the SUM of Activated-order MRC across every agent in their
+//     reporting subtree (managerChain) - the same scope misController's agentsInScope resolves.
+// Either way, "target" is always the employee's own User.target field (never derived by summing
+// subordinates - HR sets that number directly on every sales-role profile, manager or not). A
+// role that never appears in any agent's managerChain (admin/backoffice/accountant/hr) safely
+// resolves to an empty scope, not an error.
+async function computeAgentAchievement(employee, month) {
+  const scopeIds =
+    employee.role === 'agent'
+      ? [employee._id]
+      : (await User.find({ role: 'agent', active: true, managerChain: employee._id }).select('_id').lean()).map((a) => a._id);
+
+  const [y, m] = month.split('-').map(Number);
+  const start = new Date(y, m - 1, 1);
+  const end = new Date(y, m, 1);
+  const agg = scopeIds.length
+    ? await Order.aggregate([
+        {
+          $match: {
+            agentId: { $in: scopeIds },
+            status: 'Activated',
+            actDate: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) },
+          },
+        },
+        { $group: { _id: null, mrc: { $sum: '$mrc' } } },
+      ])
+    : [];
+  const achieved = agg[0]?.mrc || 0;
+  const target = employee.target || 0;
+  const achievementPct = target ? Math.round((achieved / target) * 100) : achieved > 0 ? 100 : 0;
+  return { achieved, achievementPct };
+}
+
+// First tier whose [minPct, maxPct) bracket contains the achievement % - maxPct is exclusive so
+// adjacent tiers can share a boundary (e.g. "100-125" then "125+") without gap or overlap, which
+// is how HR naturally types ranges. null maxPct means no upper bound. Falling below every tier's
+// minPct (or no tiers configured at all) means 0% commission, not an error.
+function resolveTier(tiers, achievementPct) {
+  return tiers.find((t) => achievementPct >= t.minPct && (t.maxPct == null || achievementPct < t.maxPct)) || null;
+}
+
 // Pure computation, no writes - used for both the preview endpoint and as the first
 // step of processing a run. Basic/allowance split and gratuity accrual formula match
 // the original prototype (simplified estimates, not a certified UAE gratuity calculation).
-async function computePayrollLines(month) {
-  const employees = await User.find({ active: true, salary: { $gt: 0 } }).lean();
-  const monthPrefix = month; // 'YYYY-MM'
+async function computePayrollLines(month, skipEmployeeIds = []) {
+  const candidates = await User.find({ active: true, _id: { $nin: skipEmployeeIds } }).lean();
+  // Pure-salary employees only get paid if HR actually gave them a salary figure (unchanged
+  // behavior); commission-only employees are always eligible regardless of their unused salary
+  // field. salary_commission employees need a salary figure too, same as pure-salary.
+  const employees = candidates.filter((e) => e.payType === 'commission' || (e.salary || 0) > 0);
 
   const lines = [];
   for (const emp of employees) {
-    const basic = Math.round(emp.salary * 0.6);
-    const allowance = emp.salary - basic;
+    const payType = emp.payType || 'salary';
 
-    const commissionOrders = await Order.find({
-      agentId: emp._id,
-      status: { $in: ['Activated', 'Closed'] },
-      actDate: { $regex: '^' + monthPrefix },
-    })
-      .select('commission')
-      .lean();
-    const commission = commissionOrders.reduce((sum, o) => sum + o.commission, 0);
+    let basic = 0;
+    let allowance = 0;
+    if (payType !== 'commission' && emp.salary > 0) {
+      basic = Math.round(emp.salary * 0.6);
+      allowance = emp.salary - basic;
+    }
+
+    let commission = 0;
+    let commissionBreakdown = { achievedMrc: 0, target: emp.target || 0, achievementPct: 0, tierMinPct: null, tierMaxPct: null, tierRate: null };
+    if (payType !== 'salary') {
+      const { achieved, achievementPct } = await computeAgentAchievement(emp, month);
+      // Each employee has their own independent tier set, not a shared global table.
+      const tiers = await CommissionTier.find({ employee: emp._id }).sort({ minPct: 1 }).lean();
+      const tier = resolveTier(tiers, achievementPct);
+      commission = tier ? Math.round((achieved * tier.rate) / 100) : 0;
+      commissionBreakdown = {
+        achievedMrc: achieved,
+        target: emp.target || 0,
+        achievementPct,
+        tierMinPct: tier?.minPct ?? null,
+        tierMaxPct: tier?.maxPct ?? null,
+        tierRate: tier?.rate ?? null,
+      };
+    }
 
     const openLedger = await LedgerEntry.find({
       employee: emp._id,
@@ -55,6 +119,8 @@ async function computePayrollLines(month) {
       deductions,
       netPay,
       gratuityAccrual,
+      payType,
+      commissionBreakdown,
       ledgerLines,
     });
   }
@@ -77,10 +143,10 @@ async function computePayrollLines(month) {
 // Commits a run: creates PayrollRun + PayrollLines, settles ledger deductions, and posts
 // ONE Expense (category Salaries) debiting the chosen account - same "every expense
 // including salaries comes from one account" rule the Accounting module already enforces.
-async function processPayrollRun(month, accountId, userId) {
+async function processPayrollRun(month, accountId, userId, skipEmployeeIds = []) {
   if (!(await Account.exists({ _id: accountId }))) throw new AppError('Account not found', 404);
 
-  const { lines, totals } = await computePayrollLines(month);
+  const { lines, totals } = await computePayrollLines(month, skipEmployeeIds);
   if (!lines.length) throw new AppError('No active salaried employees to pay', 400);
 
   // Atomically claim this month BEFORE any side-effecting writes — the unique index on `month`
@@ -88,7 +154,7 @@ async function processPayrollRun(month, accountId, userId) {
   // duplicate Expense/AccountTx/PayrollLine rows for the same month.
   let run;
   try {
-    run = await PayrollRun.create({ month, account: accountId, expense: null, ...totals, processedBy: userId });
+    run = await PayrollRun.create({ month, account: accountId, expense: null, ...totals, processedBy: userId, skippedEmployees: skipEmployeeIds });
   } catch (err) {
     if (err.code === 11000) throw new AppError(`Payroll for ${month} has already been processed`, 409);
     throw err;
@@ -138,9 +204,24 @@ async function processPayrollRun(month, accountId, userId) {
           note: `Payroll deduction - ${month}`,
           createdBy: userId,
           parent: entry._id,
+          payrollRun: run._id,
         });
         settledEntryIds.push(deduction._id);
       }
+
+      // The employee's own record that this run actually paid them - without this, "all
+      // salaries" never show up anywhere in the ledger, only the advances/deductions against it.
+      await LedgerEntry.create({
+        employee: l.employee._id,
+        date: new Date().toISOString().slice(0, 10),
+        type: 'Salary',
+        amount: l.netPay,
+        remaining: 0,
+        status: 'Settled',
+        note: `${month} salary payout`,
+        createdBy: userId,
+        payrollRun: run._id,
+      });
 
       await PayrollLine.create({
         payrollRun: run._id,
@@ -151,6 +232,8 @@ async function processPayrollRun(month, accountId, userId) {
         deductions: l.deductions,
         netPay: l.netPay,
         gratuityAccrual: l.gratuityAccrual,
+        payType: l.payType,
+        commissionBreakdown: l.commissionBreakdown,
         ledgerEntries: settledEntryIds,
       });
     }
@@ -164,28 +247,26 @@ async function processPayrollRun(month, accountId, userId) {
   }
 }
 
-// Fully undoes a processed run: restores every ledger entry it settled, deletes the auto-created
-// Deduction rows, deletes the Expense + the AccountTx it posted (so the account balance goes back
-// to what it was before), then deletes the run's lines and the run itself. Nothing is "reversed
-// with an offsetting entry" here — the user asked to delete a mistaken run outright.
+// Fully undoes a processed run: restores every ledger entry it settled, deletes both the
+// auto-created Deduction rows AND the Salary payout row it recorded (everything tagged with
+// this run's id), deletes the Expense + the AccountTx it posted (so the account balance goes
+// back to what it was before), then deletes the run's lines and the run itself. Nothing is
+// "reversed with an offsetting entry" here — the user asked to delete a mistaken run outright.
 async function deletePayrollRun(runId) {
   const run = await PayrollRun.findById(runId);
   if (!run) throw new AppError('Payroll run not found', 404);
 
-  const lines = await PayrollLine.find({ payrollRun: run._id });
-  for (const line of lines) {
-    for (const deductionId of line.ledgerEntries) {
-      const deduction = await LedgerEntry.findById(deductionId);
-      if (!deduction || deduction.type !== 'Deduction' || !deduction.parent) continue;
-      const original = await LedgerEntry.findById(deduction.parent);
-      if (original) {
-        original.remaining += deduction.amount;
-        original.status = 'Open';
-        await original.save();
-      }
-      await LedgerEntry.deleteOne({ _id: deduction._id });
+  const runLedgerEntries = await LedgerEntry.find({ payrollRun: run._id });
+  for (const entry of runLedgerEntries) {
+    if (entry.type !== 'Deduction' || !entry.parent) continue;
+    const original = await LedgerEntry.findById(entry.parent);
+    if (original) {
+      original.remaining += entry.amount;
+      original.status = 'Open';
+      await original.save();
     }
   }
+  await LedgerEntry.deleteMany({ payrollRun: run._id });
   await PayrollLine.deleteMany({ payrollRun: run._id });
 
   if (run.expense) {

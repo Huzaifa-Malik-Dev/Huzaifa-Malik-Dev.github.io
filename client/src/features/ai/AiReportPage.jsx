@@ -25,9 +25,9 @@ export default function AiReportPage() {
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={3}>AI Reports</Title>
+        <Title order={1} size="h3">AI Reports</Title>
         <Group gap="sm">
-          <Select data={PERIODS} value={period} onChange={(v) => v && setPeriod(v)} w={180} />
+          <Select data={PERIODS} value={period} onChange={(v) => v && setPeriod(v)} w={180} aria-label="Report period" />
           <Button leftSection={<RefreshCw size={16} />} variant="light" loading={isFetching} onClick={() => refetch()}>
             Regenerate
           </Button>
@@ -63,7 +63,7 @@ export default function AiReportPage() {
                 style={{ borderLeft: `3px solid var(--mantine-color-${FLAG_COLOR[f.type]}-6)`, background: `var(--mantine-color-${FLAG_COLOR[f.type]}-light)` }}
               >
                 <Group gap="xs">
-                  <Badge size="xs" color={FLAG_COLOR[f.type]} variant="filled">{f.type}</Badge>
+                  <Badge size="xs" color={FLAG_COLOR[f.type]} variant="light">{f.type}</Badge>
                   <Text size="sm">{f.text}</Text>
                 </Group>
               </Paper>

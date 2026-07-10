@@ -2,6 +2,9 @@ import api from './axios';
 
 export const fetchEmployees = (params) => api.get('/users', { params }).then((r) => r.data);
 export const fetchEmployee = (id) => api.get(`/users/${id}`).then((r) => r.data);
+// Human-facing lookup for the employee detail page's URL - accepts the bare number or full
+// "DC16" (server resolves either), unlike fetchEmployee above which needs the raw _id.
+export const fetchEmployeeByEmployeeId = (employeeId) => api.get(`/users/by-employee-id/${employeeId}`).then((r) => r.data);
 export const createEmployee = (body) => api.post('/users', body).then((r) => r.data);
 export const updateEmployee = (id, body) => api.patch(`/users/${id}`, body).then((r) => r.data);
 export const fetchEmployeeHistory = (id) => api.get(`/users/${id}/history`).then((r) => r.data);

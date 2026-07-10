@@ -57,6 +57,7 @@ const createSchema = z.object({
   reportsTo: z.string().nullable().optional(),
   target: z.number().optional().default(0),
   salary: z.number().optional().default(0),
+  payType: z.enum(['salary', 'commission', 'salary_commission']).optional().default('salary'),
   join: z.string().optional().default(''),
   compliance: complianceUpdateSchema.optional().default({}),
 });
@@ -77,6 +78,7 @@ const updateFieldsSchema = z.object({
   dept: z.string().optional(),
   target: z.number().optional(),
   salary: z.number().optional(),
+  payType: z.enum(['salary', 'commission', 'salary_commission']).optional(),
   join: z.string().optional(),
   status: z.enum(STATUS_VALUES).optional(),
   compliance: complianceUpdateSchema.optional(),
@@ -108,6 +110,22 @@ async function getOne(req, res, next) {
   try {
     const user = await User.findById(req.params.id).select('-passwordHash').lean();
     if (!user) throw new AppError('User not found', 404);
+    res.json({ data: user });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Human-facing employee pages are linked/shared by employeeId (e.g. "DC16"), not the database
+// _id - accepts either the bare number or the full "DC16" (case-insensitive) so a pasted full
+// ID still resolves. Internal mutations (update/upload/ledger) still use the real _id, sourced
+// from the record this returns - only the initial lookup needs this alternate key.
+async function getByEmployeeId(req, res, next) {
+  try {
+    const raw = req.params.employeeId.trim();
+    const employeeId = /^dc/i.test(raw) ? raw.toUpperCase() : `DC${raw}`;
+    const user = await User.findOne({ employeeId }).select('-passwordHash').lean();
+    if (!user) throw new AppError('Employee not found', 404);
     res.json({ data: user });
   } catch (err) {
     next(err);
@@ -466,4 +484,4 @@ async function history(req, res, next) {
   }
 }
 
-module.exports = { list, getOne, create, update, history, uploadDoc, exportEmployees, importEmployees, complianceSummary };
+module.exports = { list, getOne, getByEmployeeId, create, update, history, uploadDoc, exportEmployees, importEmployees, complianceSummary };

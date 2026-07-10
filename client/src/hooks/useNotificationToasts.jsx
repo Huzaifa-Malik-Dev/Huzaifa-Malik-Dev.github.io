@@ -22,9 +22,10 @@ export function useNotificationToasts() {
     async function poll() {
       try {
         const afterSeq = lastSeqRef.current ?? 0;
-        const res = await api.fetchNotifications(afterSeq);
-        const items = res.data || [];
         const isFirstLoad = lastSeqRef.current === null;
+        const res = await api.fetchNotifications(afterSeq);
+        if (cancelled) return;
+        const items = res.data || [];
 
         if (items.length) {
           lastSeqRef.current = Math.max(...items.map((n) => n.seq));

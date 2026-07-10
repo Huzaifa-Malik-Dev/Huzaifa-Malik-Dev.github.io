@@ -1,6 +1,6 @@
 const express = require('express');
 const requireAuth = require('../middlewares/auth');
-const { requireModule } = require('../middlewares/rbac');
+const { requireModule, requireAction } = require('../middlewares/rbac');
 const {
   listAccounts,
   createAccount,
@@ -22,18 +22,18 @@ router.use(requireAuth, requireModule('accounting'));
 router.get('/summary', summary);
 
 router.get('/accounts', listAccounts);
-router.post('/accounts', requireModule('accounting', { edit: true }), createAccount);
-router.patch('/accounts/:id', requireModule('accounting', { edit: true }), updateAccount);
+router.post('/accounts', requireAction('accounting.chartOfAccounts'), createAccount);
+router.patch('/accounts/:id', requireAction('accounting.chartOfAccounts'), updateAccount);
 router.get('/accounts/:id/transactions', accountTransactions);
 
-router.post('/transactions', requireModule('accounting', { edit: true }), recordTransaction);
+router.post('/transactions', requireAction('accounting.chartOfAccounts'), recordTransaction);
 
 router.get('/expenses', listExpenses);
-router.post('/expenses', requireModule('accounting', { edit: true }), createExpense);
+router.post('/expenses', requireAction('accounting.expenses'), createExpense);
 
 router.get('/cheques', listCheques);
-router.post('/cheques', requireModule('accounting', { edit: true }), createCheque);
-router.patch('/cheques/:id', requireModule('accounting', { edit: true }), updateCheque);
-router.patch('/cheques/:id/status', requireModule('accounting', { edit: true }), updateChequeStatus);
+router.post('/cheques', requireAction('accounting.cheques'), createCheque);
+router.patch('/cheques/:id', requireAction('accounting.cheques'), updateCheque);
+router.patch('/cheques/:id/status', requireAction('accounting.cheques'), updateChequeStatus);
 
 module.exports = router;

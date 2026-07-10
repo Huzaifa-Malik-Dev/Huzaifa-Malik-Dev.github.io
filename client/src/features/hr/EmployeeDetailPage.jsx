@@ -8,15 +8,22 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '../../utils/toast';
-import { ArrowLeft, Upload, Pencil, Eye, Camera, Image as ImageIcon, FileText } from 'lucide-react';
-import { fetchEmployee, updateEmployee, uploadEmployeeDoc } from '../../api/hr';
+import { ArrowLeft, Upload, Pencil, Eye, Camera, Image as ImageIcon, FileText, Percent } from 'lucide-react';
+import { fetchEmployeeByEmployeeId, updateEmployee, uploadEmployeeDoc } from '../../api/hr';
 import { useAuth } from '../../context/AuthContext';
 import { ROLE_LABELS } from '../../constants/nav';
 import { docHealth } from './docHealth';
 import { colorFor, initials } from '../../utils/avatar';
-import { EMPTY_COMPLIANCE, LEGAL_CASE_STATUS, ABSCONDING_STATUS } from './complianceDefaults';
+import { EMPTY_COMPLIANCE, LEGAL_CASE_STATUS, ABSCONDING_STATUS, isUnderage } from './complianceDefaults';
+import EmployeeLedgerSection from './EmployeeLedgerSection';
+import EmployeeCommissionTiersSection from './EmployeeCommissionTiersSection';
 
 const STATUS_OPTIONS = ['Active', 'Inactive', 'Frozen', 'Absconding'];
+const PAY_TYPE_OPTIONS = [
+  { value: 'salary', label: 'Salary Only' },
+  { value: 'commission', label: 'Commission Only' },
+  { value: 'salary_commission', label: 'Salary + Commission' },
+];
 const STATUS_COLOR = { Active: 'green', Inactive: 'gray', Frozen: 'blue', Absconding: 'red' };
 
 const THUMB_SIZE = 200;
@@ -127,25 +134,27 @@ function DocSection({ title, healthDate, fields, imgFieldF, imgFieldB, employeeI
 }
 
 export default function EmployeeDetailPage() {
-  const { id } = useParams();
+  const { employeeId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const canEdit = user.editModules?.includes('hr');
   const editMode = searchParams.get('edit') === '1';
-  const isSelf = String(id) === String(user.id);
   // Viewing is always available; actually editing requires both hr edit access AND explicit edit mode.
   const editing = canEdit && editMode;
 
-  const { data, isLoading } = useQuery({ queryKey: ['hr', 'employee', id], queryFn: () => fetchEmployee(id) });
+  const { data, isLoading } = useQuery({
+    queryKey: ['hr', 'employee', employeeId],
+    queryFn: () => fetchEmployeeByEmployeeId(employeeId),
+  });
   const employee = data?.data;
   const [previewUrl, setPreviewUrl] = useState(null);
 
   const form = useForm({
     initialValues: {
       name: '', arabicName: '', desig: '', dept: '', email: '', phone: '',
-      target: 0, salary: 0, join: '', status: 'Active',
+      payType: 'salary', target: '', salary: '', join: '', status: 'Active',
       compliance: EMPTY_COMPLIANCE,
     },
   });
@@ -159,8 +168,11 @@ export default function EmployeeDetailPage() {
       dept: employee.dept || '',
       email: employee.email || '',
       phone: employee.phone || '',
-      target: employee.target || 0,
-      salary: employee.salary || 0,
+      payType: employee.payType || 'salary',
+      // 0 renders blank so an unset value doesn't need clearing before typing a real one -
+      // coerced back to 0 on submit in handleSubmit if left blank.
+      target: employee.target || '',
+      salary: employee.salary || '',
       join: employee.join || '',
       status: employee.status || (employee.active !== false ? 'Active' : 'Inactive'),
       compliance: { ...EMPTY_COMPLIANCE, ...(employee.compliance || {}) },
@@ -172,7 +184,12 @@ export default function EmployeeDetailPage() {
 
   const handleSubmit = async (values) => {
     try {
-      await updateEmployee(id, values);
+      const payload = {
+        ...values,
+        target: values.target === '' ? 0 : values.target,
+        salary: values.salary === '' ? 0 : values.salary,
+      };
+      await updateEmployee(employee._id, payload);
       notifications.show({ color: 'green', message: 'Employee updated' });
       refresh();
     } catch (err) {
@@ -183,6 +200,9 @@ export default function EmployeeDetailPage() {
   if (isLoading) return <Center py="xl"><Loader size="sm" /></Center>;
   if (!employee) return <Text c="dimmed">Employee not found</Text>;
 
+  // The URL now identifies the employee by employeeId, not the raw _id user.id is - resolve
+  // the comparison against the fetched record instead of the route param.
+  const isSelf = String(employee._id) === String(user.id);
   const docs = employee.docs || {};
   const currentStatus = employee.status || (employee.active !== false ? 'Active' : 'Inactive');
 
@@ -222,7 +242,7 @@ export default function EmployeeDetailPage() {
     <Stack gap="md" w="100%">
       <Group justify="space-between">
         <Group>
-          <ActionIcon variant="subtle" onClick={() => navigate('/hr')}>
+          <ActionIcon variant="subtle" onClick={() => navigate(-1)}>
             <ArrowLeft size={18} />
           </ActionIcon>
           <div>
@@ -258,8 +278,25 @@ export default function EmployeeDetailPage() {
               <TextInput label="Designation" readOnly={!editing} {...form.getInputProps('desig')} />
               <TextInput label="Department" readOnly={!editing} {...form.getInputProps('dept')} />
               <TextInput type="date" label="Join Date" readOnly={!editing} {...form.getInputProps('join')} />
+              <Select
+                label="Pay Type"
+                data={PAY_TYPE_OPTIONS}
+                readOnly={!editing}
+                leftSection={<Percent size={16} />}
+                {...form.getInputProps('payType')}
+                onChange={(v) => {
+                  form.setFieldValue('payType', v);
+                  if (v === 'commission') form.setFieldValue('salary', 0);
+                }}
+              />
               <NumberInput label="Monthly Target (AED)" readOnly={!editing} {...form.getInputProps('target')} />
-              <NumberInput label="Salary (AED)" readOnly={!editing} {...form.getInputProps('salary')} />
+              <NumberInput
+                label="Salary (AED)"
+                readOnly={!editing}
+                disabled={editing && form.values.payType === 'commission'}
+                description={editing && form.values.payType === 'commission' ? 'Not used for Commission Only pay' : undefined}
+                {...form.getInputProps('salary')}
+              />
             </SimpleGrid>
             <Tooltip label="You can't change your own status - ask another admin or HR" disabled={!isSelf}>
               <Select
@@ -279,7 +316,12 @@ export default function EmployeeDetailPage() {
             <SimpleGrid cols={2}>
               <TextInput label="Email" readOnly={!editing} {...form.getInputProps('email')} />
               <TextInput label="Phone" readOnly={!editing} {...form.getInputProps('phone')} />
-              <TextInput type="date" label="Date of Birth" readOnly={!editing} {...form.getInputProps('compliance.dob')} />
+              <div>
+                <TextInput type="date" label="Date of Birth" readOnly={!editing} {...form.getInputProps('compliance.dob')} />
+                {isUnderage(form.values.compliance.dob) && (
+                  <Text size="xs" c="yellow.6" mt={4}>Employee is under 18 years old</Text>
+                )}
+              </div>
               <TextInput label="Nationality" readOnly={!editing} {...form.getInputProps('compliance.nationality')} />
               <TextInput label="UID (Unified Number)" readOnly={!editing} {...form.getInputProps('compliance.uid')} />
             </SimpleGrid>
@@ -502,6 +544,15 @@ export default function EmployeeDetailPage() {
         </Stack>
         </Group>
       </form>
+
+      {employee.payType !== 'salary' && (
+        <EmployeeCommissionTiersSection
+          employeeId={employee._id}
+          canEdit={user.editModules?.includes('payroll.commissionTiers')}
+        />
+      )}
+
+      <EmployeeLedgerSection employeeId={employee._id} />
 
       <Modal opened={!!previewUrl} onClose={() => setPreviewUrl(null)} size="lg" centered title="Document Preview">
         {previewUrl && <Image src={previewUrl} fit="contain" mah="75vh" radius="sm" />}

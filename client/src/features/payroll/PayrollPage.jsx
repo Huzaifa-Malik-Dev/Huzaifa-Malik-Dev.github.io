@@ -1,10 +1,12 @@
 import { Stack, Title, Tabs, Text } from '@mantine/core';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import PayrollRunTab from './PayrollRunTab';
 import EmployeeLedgerTab from './EmployeeLedgerTab';
 
 export default function PayrollPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canEdit = user.editModules?.includes('payroll');
 
   const tabs = [
@@ -12,14 +14,16 @@ export default function PayrollPage() {
     { value: 'ledger', label: 'Employee Ledger', permKey: 'payroll.ledger' },
   ].filter((t) => user.modules?.includes(t.permKey));
 
+  const activeTab = tabs.some((t) => t.value === searchParams.get('tab')) ? searchParams.get('tab') : tabs[0]?.value;
+
   return (
     <Stack>
-      <Title order={3}>Payroll</Title>
+      <Title order={1} size="h3">Payroll</Title>
 
       {tabs.length === 0 ? (
         <Text c="dimmed" size="sm">You don't have access to any Payroll sections.</Text>
       ) : (
-        <Tabs defaultValue={tabs[0].value}>
+        <Tabs value={activeTab} onChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
           <Tabs.List>
             {tabs.map((t) => <Tabs.Tab key={t.value} value={t.value}>{t.label}</Tabs.Tab>)}
           </Tabs.List>
@@ -31,7 +35,7 @@ export default function PayrollPage() {
           )}
           {tabs.some((t) => t.value === 'ledger') && (
             <Tabs.Panel value="ledger" pt="md">
-              <EmployeeLedgerTab canEdit={canEdit} />
+              <EmployeeLedgerTab />
             </Tabs.Panel>
           )}
         </Tabs>

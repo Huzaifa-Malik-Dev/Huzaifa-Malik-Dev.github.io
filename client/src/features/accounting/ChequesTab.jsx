@@ -26,7 +26,7 @@ export default function ChequesTab({ canEdit }) {
   const form = useForm({
     initialValues: {
       no: '', date: new Date().toISOString().slice(0, 10), dueDate: '', direction: 'Received',
-      party: '', amount: 0, account: '', note: '',
+      party: '', amount: '', account: '', note: '',
     },
   });
 
@@ -73,7 +73,7 @@ export default function ChequesTab({ canEdit }) {
       },
       {
         id: 'action',
-        header: '',
+        header: 'Actions',
         cell: (info) => {
           const row = info.row.original;
           const terminal = row.status === 'Cleared' || row.status === 'Bounced';

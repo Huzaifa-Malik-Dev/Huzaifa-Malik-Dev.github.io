@@ -11,6 +11,7 @@ import AgentPerformancePage from './features/mis/AgentPerformancePage';
 import AiReportPage from './features/ai/AiReportPage';
 import HrPage from './features/hr/HrPage';
 import EmployeeDetailPage from './features/hr/EmployeeDetailPage';
+import EmployeeLedgerPage from './features/hr/EmployeeLedgerPage';
 import AddEmployeePage from './features/hr/AddEmployeePage';
 import AccountingPage from './features/accounting/AccountingPage';
 import PayrollPage from './features/payroll/PayrollPage';
@@ -44,7 +45,8 @@ export default function App() {
           <Route element={<ProtectedRoute module="hr" />}>
             <Route path="/hr" element={<HrPage />} />
             <Route path="/hr/new" element={<AddEmployeePage />} />
-            <Route path="/hr/:id" element={<EmployeeDetailPage />} />
+            <Route path="/hr/employees/:employeeId" element={<EmployeeDetailPage />} />
+            <Route path="/hr/employees/:employeeId/ledger" element={<EmployeeLedgerPage />} />
           </Route>
           <Route element={<ProtectedRoute module="accounting" />}>
             <Route path="/accounting" element={<AccountingPage />} />

@@ -228,7 +228,7 @@ async function getOne(req, res, next) {
 
 const EXPORT_COLUMNS = [
   { header: 'DSR No', key: 'dsrNo' },
-  { header: 'Date', key: 'date' },
+  { header: 'Date', get: (r) => isoToDmy(r.date) },
   { header: 'Company', key: 'company' },
   { header: 'Building', key: 'building' },
   { header: 'Contact No', key: 'contactNo' },
@@ -254,18 +254,46 @@ async function exportDsr(req, res, next) {
 }
 
 // Import rows come from a human-edited spreadsheet, not the app's own <input type="date">, so
-// the date is checked strictly (YYYY-MM-DD) instead of just "non-empty" — Excel silently
-// reformats a date-typed cell to whatever the file's locale display format is (e.g. "1/9/2026"),
-// and every date-range report in this app (Dashboard/MIS/AI) compares this field as a plain
-// string, so a non-ISO value here doesn't fail loudly, it just quietly reports wrong.
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// the date is checked strictly instead of just "non-empty" — Excel silently reformats a
+// date-typed cell to whatever the file's locale display format is, and every date-range report
+// in this app (Dashboard/MIS/AI) compares this field as a plain ISO string, so a bad value here
+// doesn't fail loudly, it just quietly reports wrong. Spreadsheets are filled in DD-MM-YYYY
+// (matching how the team actually types dates), converted to the app's internal YYYY-MM-DD here.
+const DMY_DATE_RE = /^(\d{2})-(\d{2})-(\d{4})$/;
+
+function parseImportDate(raw) {
+  const m = String(raw).trim().match(DMY_DATE_RE);
+  if (!m) return null;
+  const [, dd, mm, yyyy] = m;
+  const day = Number(dd);
+  const month = Number(mm);
+  if (month < 1 || month > 12) return null;
+  const daysInMonth = new Date(Number(yyyy), month, 0).getDate();
+  if (day < 1 || day > daysInMonth) return null;
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// Export mirrors the import format (DD-MM-YYYY) so a file round-trips: export, edit in Excel,
+// re-import, without anyone having to reformat the Date column by hand.
+function isoToDmy(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return iso || '';
+  const [y, m, d] = iso.split('-');
+  return `${d}-${m}-${y}`;
+}
 
 // Case-insensitive lookup so a stray autocapitalize in Excel ("interested" vs "Interested")
 // doesn't fail the whole row - resolved back to the exact enum value the schema expects.
 const STATUS_BY_LOWER = new Map(CALL_STATUS.map((s) => [s.toLowerCase(), s]));
 
 const importRowSchema = z.object({
-  date: z.string().regex(ISO_DATE_RE, 'Date must be in YYYY-MM-DD format (check the cell wasn\'t auto-reformatted by Excel)'),
+  date: z.string().transform((val, ctx) => {
+    const parsed = parseImportDate(val);
+    if (!parsed) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Date must be in DD-MM-YYYY format (check the cell wasn\'t auto-reformatted by Excel)' });
+      return z.NEVER;
+    }
+    return parsed;
+  }),
   company: z.string().trim().min(1, 'Company is required'),
   building: z.string().optional().default(''),
   contactNo: contactNoSchema,
@@ -280,6 +308,24 @@ async function importDsr(req, res, next) {
     if (!req.file) throw new AppError('No file uploaded', 400);
     const rawRows = parseXlsxBuffer(req.file.buffer);
     if (!rawRows.length) throw new AppError('The file has no data rows', 400);
+
+    // A missing Date on even one row usually means the column got dropped, renamed, or the
+    // sheet is the wrong one entirely - reject the whole file upfront instead of silently
+    // creating everything except that row.
+    const missingDateRows = rawRows
+      .map((raw, i) => (cell(raw, 'Date') ? null : i + 2))
+      .filter((rowNum) => rowNum !== null);
+    if (missingDateRows.length) {
+      // This detail renders in a scrollable modal alert, not a toast, so it can afford to list
+      // a real number of rows - just capped well short of "every row in a 9,000-row file" for
+      // files where the whole sheet is missing the column entirely.
+      const shown = missingDateRows.slice(0, 100).join(', ');
+      const rest = missingDateRows.length > 100 ? ` and ${missingDateRows.length - 100} more` : '';
+      throw new AppError(
+        `Date is missing on row(s): ${shown}${rest}. Every row must have a Date (DD-MM-YYYY) — no rows were imported.`,
+        400
+      );
+    }
 
     const errors = [];
     let created = 0;

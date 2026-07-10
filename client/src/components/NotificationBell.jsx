@@ -34,20 +34,20 @@ export default function NotificationBell() {
 
   return (
     <Popover width={360} position="bottom-end" opened={opened} onChange={setOpened} shadow="md">
-      <Popover.Target>
-        <Indicator disabled={unread === 0} label={unread > 9 ? '9+' : unread} size={16} color="red" offset={4}>
-          <ActionIcon variant="subtle" color="gray" size="lg" onClick={() => setOpened((o) => !o)}>
+      <Indicator disabled={unread === 0} label={unread > 9 ? '9+' : unread} size={16} color="red" offset={4}>
+        <Popover.Target>
+          <ActionIcon variant="subtle" color="gray" size="lg" aria-label="Notifications" onClick={() => setOpened((o) => !o)}>
             <Bell size={20} />
           </ActionIcon>
-        </Indicator>
-      </Popover.Target>
+        </Popover.Target>
+      </Indicator>
       <Popover.Dropdown p={0}>
         <Group justify="space-between" p="sm">
           <Text fw={600} size="sm">Notifications</Text>
           <Button size="compact-xs" variant="subtle" onClick={markAllRead}>Mark all read</Button>
         </Group>
         <Divider />
-        <ScrollArea.Autosize mah={360}>
+        <ScrollArea.Autosize mah={360} viewportProps={{ tabIndex: 0, role: 'region', 'aria-label': 'Notifications list, scrollable' }}>
           <Stack gap={0}>
             {items.length === 0 && (
               <Text c="dimmed" size="sm" p="md" ta="center">No notifications yet</Text>

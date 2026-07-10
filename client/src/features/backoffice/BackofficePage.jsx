@@ -3,7 +3,7 @@ import { Title, Group, Badge, Paper, Select, Modal, Stack, TextInput, Textarea, 
 import { useForm } from '@mantine/form';
 import { useQueryClient } from '@tanstack/react-query';
 import { notifications } from '../../utils/toast';
-import { Pencil, MessageCircle } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import ImportExportBar from '../../components/ImportExportBar';
 import { usePagedList } from '../../hooks/usePagedList';
@@ -47,7 +47,7 @@ export default function BackofficePage() {
   const editForm = useForm({
     initialValues: {
       subDate: '', contact: '', contactNo: '', email: '', pid: '', ord: '', eOrderNo: '', sr: 'NEW',
-      cat: '', product: '', contract: '12 Months', qty: 1, mrc: 0, eAcctMgr: '', actDate: '', commission: 0, remarks: '',
+      cat: '', product: '', contract: '12 Months', qty: 1, mrc: '', eAcctMgr: '', actDate: '', commission: '', remarks: '',
     },
   });
 
@@ -78,14 +78,19 @@ export default function BackofficePage() {
     editForm.setValues({
       subDate: row.subDate || '', contact: row.contact || '', contactNo: row.contactNo || '', email: row.email || '', pid: row.pid || '',
       ord: row.ord || '', eOrderNo: row.eOrderNo || '', sr: row.sr || 'NEW', cat: row.cat || '', product: row.product || '',
-      contract: row.contract || '12 Months', qty: row.qty || 1, mrc: row.mrc || 0, eAcctMgr: row.eAcctMgr || '',
-      actDate: row.actDate || '', commission: row.commission || 0, remarks: row.remarks || '',
+      contract: row.contract || '12 Months', qty: row.qty || 1, mrc: row.mrc || '', eAcctMgr: row.eAcctMgr || '',
+      actDate: row.actDate || '', commission: row.commission || '', remarks: row.remarks || '',
     });
   };
 
   const handleEdit = async (values) => {
     try {
-      await updateOrder(editRow._id, values);
+      const payload = {
+        ...values,
+        mrc: values.mrc === '' ? 0 : values.mrc,
+        commission: values.commission === '' ? 0 : values.commission,
+      };
+      await updateOrder(editRow._id, payload);
       notifications.show({ color: 'green', message: 'Order updated' });
       setEditRow(null);
       refresh();
@@ -116,6 +121,7 @@ export default function BackofficePage() {
               onChange={(v) => v && handleStatusChange(row, v)}
               size="xs"
               w={160}
+              aria-label={`Change status for order ${row.eOrderNo || row._id}`}
             />
           );
         },
@@ -123,30 +129,27 @@ export default function BackofficePage() {
       { accessorKey: 'commission', header: 'Commission', cell: (info) => AED(info.getValue()) },
       {
         id: 'action',
-        header: '',
+        header: 'Actions',
         cell: (info) => (
-          <Group gap="xs" wrap="nowrap">
-            <Tooltip label="Chat about this order (tag teammates, see full history)">
-              <Indicator
-                label={unreadCounts[info.row.original.dsrNo] > 9 ? '9+' : unreadCounts[info.row.original.dsrNo]}
-                disabled={!unreadCounts[info.row.original.dsrNo]}
-                size={16}
-                color="red"
-                offset={4}
+          <Tooltip label="Chat about this order (tag teammates, see full history)">
+            <Indicator
+              label={unreadCounts[info.row.original.dsrNo] > 9 ? '9+' : unreadCounts[info.row.original.dsrNo]}
+              disabled={!unreadCounts[info.row.original.dsrNo]}
+              size={16}
+              color="red"
+              offset={4}
+            >
+              <ActionIcon
+                variant="light"
+                size="lg"
+                radius="md"
+                onClick={(e) => { e.stopPropagation(); openChat(info.row.original.dsrNo); }}
+                aria-label="Chat"
               >
-                <ActionIcon variant="light" size="lg" radius="md" onClick={() => openChat(info.row.original.dsrNo)} aria-label="Chat">
-                  <MessageCircle size={18} />
-                </ActionIcon>
-              </Indicator>
-            </Tooltip>
-            {canEdit && (
-              <Tooltip label="Edit order details (PID, order no., contract, commission, etc.)">
-                <ActionIcon variant="light" size="lg" radius="md" onClick={() => openEdit(info.row.original)} aria-label="Edit order">
-                  <Pencil size={18} />
-                </ActionIcon>
-              </Tooltip>
-            )}
-          </Group>
+                <MessageCircle size={18} />
+              </ActionIcon>
+            </Indicator>
+          </Tooltip>
         ),
       },
     ],
@@ -156,7 +159,7 @@ export default function BackofficePage() {
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={3}>Back Office / Orders</Title>
+        <Title order={1} size="h3">Back Office / Orders</Title>
         <Group gap="sm">
           <Select placeholder="All statuses" data={ORDER_STATUS} value={statusFilter} onChange={setStatusFilter} clearable w={200} />
           <ImportExportBar
@@ -181,32 +184,33 @@ export default function BackofficePage() {
           onSearchChange={list.onSearchChange}
           isLoading={list.isLoading}
           emptyLabel="No orders yet — approve a pipeline deal to open one"
+          onRowClick={openEdit}
         />
       </Paper>
 
-      <Modal opened={!!editRow} onClose={() => setEditRow(null)} title={`Edit order — ${editRow?.dsrNo || ''}`} size="lg">
+      <Modal opened={!!editRow} onClose={() => setEditRow(null)} title={`Order — ${editRow?.dsrNo || ''}`} size="lg">
         <form onSubmit={editForm.onSubmit(handleEdit)}>
           <Stack gap="sm">
             <SimpleGrid cols={2}>
-              <TextInput type="date" label="Submission Date" {...editForm.getInputProps('subDate')} />
-              <TextInput type="date" label="Activation Date" {...editForm.getInputProps('actDate')} />
-              <TextInput label="Contact Person" {...editForm.getInputProps('contact')} />
-              <TextInput label="Contact No." {...editForm.getInputProps('contactNo')} />
-              <TextInput label="Email" {...editForm.getInputProps('email')} />
-              <TextInput label="PID" {...editForm.getInputProps('pid')} />
-              <TextInput label="Order No." {...editForm.getInputProps('ord')} />
-              <TextInput label="e& Order No." {...editForm.getInputProps('eOrderNo')} />
-              <TextInput label="Subscription Type (NEW / MNP / MIG ...)" {...editForm.getInputProps('sr')} />
-              <TextInput label="Category" {...editForm.getInputProps('cat')} />
-              <TextInput label="Product" {...editForm.getInputProps('product')} />
-              <TextInput label="Contract" {...editForm.getInputProps('contract')} />
-              <TextInput label="e& Account Manager" {...editForm.getInputProps('eAcctMgr')} />
-              <NumberInput label="Quantity" min={1} {...editForm.getInputProps('qty')} />
-              <NumberInput label="MRC (AED)" min={0} {...editForm.getInputProps('mrc')} />
-              <NumberInput label="Commission (AED)" min={0} {...editForm.getInputProps('commission')} />
+              <TextInput type="date" label="Submission Date" disabled={!canEdit} {...editForm.getInputProps('subDate')} />
+              <TextInput type="date" label="Activation Date" disabled={!canEdit} {...editForm.getInputProps('actDate')} />
+              <TextInput label="Contact Person" disabled={!canEdit} {...editForm.getInputProps('contact')} />
+              <TextInput label="Contact No." disabled={!canEdit} {...editForm.getInputProps('contactNo')} />
+              <TextInput label="Email" disabled={!canEdit} {...editForm.getInputProps('email')} />
+              <TextInput label="PID" disabled={!canEdit} {...editForm.getInputProps('pid')} />
+              <TextInput label="Order No." disabled={!canEdit} {...editForm.getInputProps('ord')} />
+              <TextInput label="e& Order No." disabled={!canEdit} {...editForm.getInputProps('eOrderNo')} />
+              <TextInput label="Subscription Type (NEW / MNP / MIG ...)" disabled={!canEdit} {...editForm.getInputProps('sr')} />
+              <TextInput label="Category" disabled={!canEdit} {...editForm.getInputProps('cat')} />
+              <TextInput label="Product" disabled={!canEdit} {...editForm.getInputProps('product')} />
+              <TextInput label="Contract" disabled={!canEdit} {...editForm.getInputProps('contract')} />
+              <TextInput label="e& Account Manager" disabled={!canEdit} {...editForm.getInputProps('eAcctMgr')} />
+              <NumberInput label="Quantity" min={1} disabled={!canEdit} {...editForm.getInputProps('qty')} />
+              <NumberInput label="MRC (AED)" min={0} disabled={!canEdit} {...editForm.getInputProps('mrc')} />
+              <NumberInput label="Commission (AED)" min={0} disabled={!canEdit} {...editForm.getInputProps('commission')} />
             </SimpleGrid>
-            <Textarea label="Remarks" {...editForm.getInputProps('remarks')} />
-            <Button type="submit" mt="sm">Save changes</Button>
+            <Textarea label="Remarks" disabled={!canEdit} {...editForm.getInputProps('remarks')} />
+            {canEdit && <Button type="submit" mt="sm">Save changes</Button>}
           </Stack>
         </form>
       </Modal>

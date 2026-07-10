@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Stack, Title, Group, Button, Paper, Table, Progress, Text, TextInput, Loader, Center } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
-import { Download } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { fetchMisRollup, misExportUrl } from '../../api/mis';
 
 function AED(n) {
@@ -30,10 +30,10 @@ export default function MisPage() {
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={3}>MIS & Targets</Title>
+        <Title order={1} size="h3">MIS & Targets</Title>
         <Group gap="sm">
           <TextInput type="month" value={month} onChange={(e) => setMonth(e.currentTarget.value)} placeholder="All time" w={160} />
-          <Button leftSection={<Download size={16} />} variant="light" component="a" href={misExportUrl(month)} target="_blank" rel="noreferrer">
+          <Button leftSection={<Upload size={16} />} variant="light" component="a" href={misExportUrl(month)} target="_blank" rel="noreferrer">
             Export CSV
           </Button>
         </Group>
@@ -46,7 +46,7 @@ export default function MisPage() {
         {isLoading ? (
           <Center py="xl"><Loader size="sm" /></Center>
         ) : (
-          <Table.ScrollContainer minWidth={800}>
+          <Table.ScrollContainer minWidth={800} scrollAreaProps={{ viewportProps: { tabIndex: 0, role: 'region', 'aria-label': 'Table, scrollable horizontally' } }}>
             <Table striped highlightOnHover verticalSpacing="sm">
               <Table.Thead>
                 <Table.Tr>
@@ -84,7 +84,7 @@ export default function MisPage() {
                       <Table.Td>{AED(r.achieved)}</Table.Td>
                       <Table.Td w={160}>
                         <Group gap="xs" wrap="nowrap">
-                          <Progress value={Math.min(100, r.achievementPct)} color={pctColor(r.achievementPct)} size="sm" w={90} />
+                          <Progress value={Math.min(100, r.achievementPct)} color={pctColor(r.achievementPct)} size="sm" w={90} aria-label={`${r.achievementPct}% of target achieved`} />
                           <Text size="xs">{r.achievementPct}%</Text>
                         </Group>
                       </Table.Td>

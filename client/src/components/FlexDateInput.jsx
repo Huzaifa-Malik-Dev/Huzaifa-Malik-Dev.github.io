@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { TextInput } from '@mantine/core';
+import { TextInput, ActionIcon, Popover } from '@mantine/core';
+import { DatePicker } from '@mantine/dates';
 import { Calendar } from 'lucide-react';
 
 // Accepts dd/mm/yy, dd/mm/yyyy, dd-mm-yyyy, or dd-mm-yy typed or pasted freely (plus the app's own
 // yyyy-mm-dd passing through unchanged), normalized to yyyy-mm-dd on blur/Enter. An unparsable or
 // calendar-invalid value (e.g. 31/02/2026) is cleared rather than silently kept wrong, since every
 // date-range report in this app (Dashboard/MIS/AI) compares this field as a plain ISO string.
+// The calendar icon also opens a visual picker (Mantine's DatePicker, which already speaks the
+// same yyyy-mm-dd string format) for anyone who'd rather click than type.
 const SLASH_OR_DASH = [
   { re: /^(\d{2})[/-](\d{2})[/-](\d{4})$/, yearIdx: 3 }, // dd/mm/yyyy or dd-mm-yyyy
   { re: /^(\d{2})[/-](\d{2})[/-](\d{2})$/, yearIdx: 3 }, // dd/mm/yy or dd-mm-yy
@@ -39,6 +42,7 @@ function isoToDisplay(iso) {
 
 export default function FlexDateInput({ value, onChange, label, required, readOnly, size, ...rest }) {
   const [text, setText] = useState(isoToDisplay(value));
+  const [pickerOpened, setPickerOpened] = useState(false);
 
   // Keep the displayed text in sync when the underlying form value changes from outside
   // (e.g. loading an existing record into the edit form) rather than from this input's own typing.
@@ -59,18 +63,43 @@ export default function FlexDateInput({ value, onChange, label, required, readOn
   };
 
   return (
-    <TextInput
-      label={label}
-      required={required}
-      readOnly={readOnly}
-      size={size}
-      placeholder="dd/mm/yyyy"
-      leftSection={<Calendar size={16} />}
-      value={text}
-      onChange={(e) => setText(e.currentTarget.value)}
-      onBlur={readOnly ? undefined : commit}
-      onKeyDown={readOnly ? undefined : (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
-      {...rest}
-    />
+    <Popover opened={pickerOpened} onChange={setPickerOpened} withinPortal shadow="md" position="bottom-start">
+      <Popover.Target>
+        <TextInput
+          label={label}
+          required={required}
+          readOnly={readOnly}
+          size={size}
+          placeholder="dd/mm/yyyy"
+          leftSection={
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="sm"
+              disabled={readOnly}
+              aria-label="Open calendar"
+              onClick={() => setPickerOpened((o) => !o)}
+            >
+              <Calendar size={16} />
+            </ActionIcon>
+          }
+          value={text}
+          onChange={(e) => setText(e.currentTarget.value)}
+          onBlur={readOnly ? undefined : commit}
+          onKeyDown={readOnly ? undefined : (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
+          {...rest}
+        />
+      </Popover.Target>
+      <Popover.Dropdown p={4}>
+        <DatePicker
+          value={/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null}
+          onChange={(iso) => {
+            setText(isoToDisplay(iso));
+            onChange(iso || '');
+            setPickerOpened(false);
+          }}
+        />
+      </Popover.Dropdown>
+    </Popover>
   );
 }

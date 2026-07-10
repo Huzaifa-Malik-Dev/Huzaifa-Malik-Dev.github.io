@@ -48,7 +48,7 @@ export default function LoginPage() {
       <Paper withBorder shadow="md" p={32} radius="md" w={380}>
         <Stack gap="lg">
           <Stack align="center" gap={4}>
-            <img src="/favicon-192.png" alt="Digitalcoo" width={64} height={64} />
+            <img src="/logo-mark.png" alt="Digitalcoo" width={72} height={72} style={{ objectFit: 'contain' }} />
             <Title order={2} mt={4}>Digitalcoo CRM</Title>
             <Text c="dimmed" size="sm">Sign in to continue</Text>
           </Stack>

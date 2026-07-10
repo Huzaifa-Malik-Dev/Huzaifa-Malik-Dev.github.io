@@ -16,6 +16,7 @@ export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, i
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState(null);
+  const [importError, setImportError] = useState(null);
 
   if (!user.importExportModules?.includes(moduleKey)) return null;
 
@@ -44,12 +45,14 @@ export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, i
   const openImport = () => {
     setFile(null);
     setResult(null);
+    setImportError(null);
     setImportOpen(true);
   };
 
   const handleImport = async () => {
     if (!file) return;
     setImporting(true);
+    setImportError(null);
     try {
       const { data } = await importFn(file);
       setResult(data);
@@ -64,7 +67,12 @@ export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, i
         onImported?.();
       }
     } catch (err) {
-      notifications.show({ color: 'red', title: 'Import failed', message: err.response?.data?.error || 'Something went wrong' });
+      // Full detail (which can be long, e.g. "Date is missing on rows 2, 3, 4...") stays in the
+      // modal where there's room to read and scroll it. The toast points there by name instead
+      // of repeating (or worse, genericizing into "Something went wrong") the same message,
+      // which would read like an unhandled crash rather than a specific, understood problem.
+      setImportError(err.response?.data?.error || 'Something went wrong — please try again.');
+      notifications.show({ color: 'red', title: 'Import failed', message: 'See details below.' });
     } finally {
       setImporting(false);
     }
@@ -93,6 +101,14 @@ export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, i
             Upload
           </Button>
 
+          {importError && (
+            <Alert color="red" icon={<TriangleAlert size={16} />} title="Import failed">
+              <ScrollArea.Autosize mah={220} viewportProps={{ tabIndex: 0, role: 'region', 'aria-label': 'Import error, scrollable' }}>
+                <Text size="sm">{importError}</Text>
+              </ScrollArea.Autosize>
+            </Alert>
+          )}
+
           {result && (
             <Stack gap="xs">
               <Text size="sm">
@@ -101,11 +117,14 @@ export default function ImportExportBar({ moduleKey, filenamePrefix, exportFn, i
               </Text>
               {result.failed > 0 && (
                 <Alert color="red" icon={<TriangleAlert size={16} />} title="Some rows could not be imported">
-                  <ScrollArea.Autosize mah={220}>
+                  <ScrollArea.Autosize mah={220} viewportProps={{ tabIndex: 0, role: 'region', 'aria-label': 'Import errors, scrollable' }}>
                     <List size="sm" spacing={4}>
-                      {result.errors.map((e, i) => (
+                      {result.errors.slice(0, 50).map((e, i) => (
                         <List.Item key={i}>Row {e.row}: {e.message}</List.Item>
                       ))}
+                      {result.errors.length > 50 && (
+                        <List.Item>… and {result.errors.length - 50} more</List.Item>
+                      )}
                     </List>
                   </ScrollArea.Autosize>
                 </Alert>

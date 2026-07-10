@@ -56,7 +56,7 @@ export default function PipelinePage() {
     () => [
       {
         id: 'needsMe',
-        header: '',
+        header: 'Alert',
         cell: (info) => {
           const row = info.row.original;
           const needsMe = row.approval === 'pending_tl' && (user.role === 'admin' || String(row.tlId) === String(user.id));
@@ -110,7 +110,7 @@ export default function PipelinePage() {
       },
       {
         id: 'action',
-        header: '',
+        header: 'Actions',
         cell: (info) => {
           const row = info.row.original;
           return (
@@ -143,7 +143,7 @@ export default function PipelinePage() {
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={3}>Sales Pipeline</Title>
+        <Title order={1} size="h3">Sales Pipeline</Title>
         <Group gap="sm">
           <Select placeholder="All stages" data={STAGES} value={stageFilter} onChange={setStageFilter} clearable w={200} />
           <Select placeholder="All approval states" data={APPROVAL_OPTIONS} value={approvalFilter} onChange={setApprovalFilter} clearable w={200} />

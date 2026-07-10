@@ -50,7 +50,7 @@ export default function AgentPerformancePage() {
     <Stack gap="md">
       <Group justify="space-between">
         <Group>
-          <ActionIcon variant="subtle" onClick={() => navigate('/mis')} aria-label="Back to MIS">
+          <ActionIcon variant="subtle" onClick={() => navigate(-1)} aria-label="Back to MIS">
             <ArrowLeft size={18} />
           </ActionIcon>
           <Avatar size={44} radius="xl" color={colorFor(person.name)}>{initials(person.name)}</Avatar>
@@ -94,7 +94,7 @@ export default function AgentPerformancePage() {
         {isManager && (
           <Paper withBorder p="md" radius="md" style={{ gridColumn: 'span 2' }}>
             <Text fw={600} mb="sm">Team Breakdown</Text>
-            <Table.ScrollContainer minWidth={500}>
+            <Table.ScrollContainer minWidth={500} scrollAreaProps={{ viewportProps: { tabIndex: 0, role: 'region', 'aria-label': 'Table, scrollable horizontally' } }}>
               <Table striped highlightOnHover verticalSpacing="xs">
                 <Table.Thead>
                   <Table.Tr>

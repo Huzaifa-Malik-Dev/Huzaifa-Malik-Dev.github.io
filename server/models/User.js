@@ -66,6 +66,10 @@ const userSchema = new mongoose.Schema(
     managerChain: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     target: { type: Number, default: 0 },
     salary: { type: Number, default: 0 },
+    // How Payroll pays this person: a flat salary, tiered commission on target achievement (see
+    // CommissionTier), or both. Applies to any role, not just agents - a Team Leader/Teams Head
+    // can be put on commission against their team's achievement (see services/payroll.js).
+    payType: { type: String, enum: ['salary', 'commission', 'salary_commission'], default: 'salary' },
     join: { type: String, default: '' },
     // Lifecycle status — the single source of truth. `active` is kept in sync (Active -> true,
     // anything else -> false) so login gating and every existing `active: true` rollup filter

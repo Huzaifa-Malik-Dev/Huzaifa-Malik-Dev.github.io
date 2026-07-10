@@ -219,7 +219,7 @@ export default function ChatDrawer({ dsrNo, opened, onClose }) {
         <Text size="10px" c="dimmed" px="md" pb="xs" pt={2}>Shared thread · agent, Team Leader, Teams Head, Sales Head &amp; Back Office</Text>
         <Divider />
 
-        <ScrollArea flex={1} px="md" py="sm" viewportRef={scrollRef} style={{ background: 'var(--mantine-color-body)', minHeight: 0 }}>
+        <ScrollArea flex={1} px="md" py="sm" viewportRef={scrollRef} viewportProps={{ tabIndex: 0, role: 'region', 'aria-label': 'Chat messages, scrollable' }} style={{ background: 'var(--mantine-color-body)', minHeight: 0 }}>
           {isLoading ? (
             <Center py="xl"><Loader size="sm" /></Center>
           ) : groups.length === 0 ? (

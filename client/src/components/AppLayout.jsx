@@ -30,11 +30,11 @@ export default function AppLayout() {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="sm">
-            <UnstyledButton onClick={() => { toggleMobile(); toggleDesktop(); }}>
+            <UnstyledButton onClick={() => { toggleMobile(); toggleDesktop(); }} aria-label="Toggle navigation menu">
               <MenuIcon size={20} />
             </UnstyledButton>
             <Group gap={8} wrap="nowrap">
-              <img src="/favicon-192.png" alt="" width={28} height={28} style={{ display: 'block' }} />
+              <img src="/logo-mark.png" alt="" width={28} height={28} style={{ display: 'block', objectFit: 'contain' }} />
               <Text fw={700} size="lg" visibleFrom="xs">Digitalcoo CRM</Text>
             </Group>
           </Group>

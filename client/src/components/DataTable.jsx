@@ -44,7 +44,7 @@ export default function DataTable({
         <Text size="sm" c="dimmed">{totalRowCount.toLocaleString()} records</Text>
       </Group>
 
-      <Table.ScrollContainer minWidth={700}>
+      <Table.ScrollContainer minWidth={700} scrollAreaProps={{ viewportProps: { tabIndex: 0, role: 'region', 'aria-label': 'Table, scrollable horizontally' } }}>
         <Table striped highlightOnHover verticalSpacing="sm">
           <Table.Thead>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -121,6 +121,7 @@ export default function DataTable({
             onChange={(v) => onPageChange(1, Number(v))}
             w={80}
             size="xs"
+            aria-label="Rows per page"
           />
         </Group>
         <Pagination
@@ -129,6 +130,12 @@ export default function DataTable({
           onChange={(p) => onPageChange(p, limit)}
           withEdges
           size="sm"
+          getControlProps={(control) => ({
+            first: { 'aria-label': 'First page' },
+            previous: { 'aria-label': 'Previous page' },
+            next: { 'aria-label': 'Next page' },
+            last: { 'aria-label': 'Last page' },
+          }[control])}
         />
       </Group>
     </Box>

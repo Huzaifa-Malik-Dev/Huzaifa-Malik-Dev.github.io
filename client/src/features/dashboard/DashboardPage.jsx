@@ -26,7 +26,7 @@ export default function DashboardPage() {
 
   return (
     <Stack>
-      <Title order={3}>Dashboard</Title>
+      <Title order={1} size="h3">Dashboard</Title>
       <Text c="dimmed" size="sm">Welcome back, {user.name} — here's what's happening in your scope.</Text>
 
       {!isLoading && s && (
@@ -97,7 +97,7 @@ export default function DashboardPage() {
 
             <Paper withBorder p="md" radius="md">
               <Text fw={600} mb="sm">Recent Notifications</Text>
-              <ScrollArea h={180}>
+              <ScrollArea h={180} viewportProps={{ tabIndex: 0, role: 'region', 'aria-label': 'Recent notifications, scrollable' }}>
                 <Stack gap="xs">
                   {(s.recentNotifications || []).length === 0 && <Text c="dimmed" size="sm">Nothing yet</Text>}
                   {(s.recentNotifications || []).map((n) => (

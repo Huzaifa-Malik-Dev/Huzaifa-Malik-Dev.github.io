@@ -176,7 +176,7 @@ export default function PermissionsPage() {
   return (
     <Stack gap="md">
       <div>
-        <Title order={4}>Permissions <Badge ml="xs" color="red" variant="light">EDITABLE</Badge></Title>
+        <Title order={2} size="h4">Permissions <Badge ml="xs" color="red" variant="light">EDITABLE</Badge></Title>
         <Text size="sm" c="dimmed">Pick a role to set the default for everyone in it, or a specific person to override just them. "Edit" always includes "View".</Text>
       </div>
 
@@ -184,7 +184,7 @@ export default function PermissionsPage() {
         <SegmentedControl value={mode} onChange={setMode} data={[{ value: 'role', label: 'Role' }, { value: 'person', label: 'Person' }]} />
         {mode === 'role' ? (
           <Group align="flex-end">
-            <Select data={ROLE_OPTIONS} value={role} onChange={setRole} w={240} />
+            <Select data={ROLE_OPTIONS} value={role} onChange={setRole} w={240} aria-label="Select role" />
             <Tooltip label="Resets every module and nested permission for this role back to the shipped default" position="top">
               <Button size="xs" variant="light" color="gray" onClick={handleResetRole}>
                 Reset to role default
@@ -350,6 +350,7 @@ export default function PermissionsPage() {
                     <Switch
                       checked={!!effectiveImportExport?.includes(item.key)}
                       onChange={(e) => handleImportExportChange(item.key, e.currentTarget.checked)}
+                      aria-label={`Toggle Import/Export access for ${item.label}`}
                     />
                   </Group>
                 ))}

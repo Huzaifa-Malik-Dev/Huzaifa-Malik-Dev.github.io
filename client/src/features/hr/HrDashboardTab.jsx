@@ -7,12 +7,13 @@ import {
 } from '@mantine/core';
 import { IdCard, Plane, Fingerprint, Landmark, ShieldCheck, CircleCheck } from 'lucide-react';
 import { fetchComplianceSummary } from '../../api/hr';
+import { employeeUrlId } from './employeeUrl';
 
 const CATEGORY_ICON = { passport: IdCard, visa: Plane, eid: Fingerprint, labourCard: Landmark, insurance: ShieldCheck };
 
 function EmployeeRow({ employee, onOpen }) {
   return (
-    <UnstyledButton onClick={() => onOpen(employee._id)} w="100%">
+    <UnstyledButton onClick={() => onOpen(employee.employeeId)} w="100%">
       <Group justify="space-between" py={6} px={4} style={{ borderRadius: 6 }}>
         <Group gap="xs">
           <Text size="sm" fw={600}>{employee.name}</Text>
@@ -36,7 +37,7 @@ export default function HrDashboardTab() {
   const totalExpiring = data?.data?.totalExpiring || 0;
   const selected = categories.find((c) => c.key === activeCategory);
 
-  const goToEmployee = (id) => navigate(`/hr/${id}`);
+  const goToEmployee = (employeeId) => navigate(`/hr/employees/${employeeUrlId(employeeId)}`);
 
   return (
     <Stack gap="md">
@@ -88,7 +89,7 @@ export default function HrDashboardTab() {
               <Group gap="xs" mb="xs">
                 <Badge color="red" variant="light">Expired ({selected.expired.length})</Badge>
               </Group>
-              <ScrollArea.Autosize mah={200}>
+              <ScrollArea.Autosize mah={200} viewportProps={{ tabIndex: 0, role: 'region', 'aria-label': 'Expired documents, scrollable' }}>
                 <Stack gap={2}>
                   {selected.expired.length === 0 && <Text size="sm" c="dimmed">None</Text>}
                   {selected.expired.map((e) => <EmployeeRow key={e._id} employee={e} onOpen={goToEmployee} />)}
@@ -100,7 +101,7 @@ export default function HrDashboardTab() {
               <Group gap="xs" mb="xs">
                 <Badge color="yellow" variant="light">Expiring within 30 days ({selected.expiring.length})</Badge>
               </Group>
-              <ScrollArea.Autosize mah={200}>
+              <ScrollArea.Autosize mah={200} viewportProps={{ tabIndex: 0, role: 'region', 'aria-label': 'Expiring documents, scrollable' }}>
                 <Stack gap={2}>
                   {selected.expiring.length === 0 && <Text size="sm" c="dimmed">None</Text>}
                   {selected.expiring.map((e) => <EmployeeRow key={e._id} employee={e} onOpen={goToEmployee} />)}

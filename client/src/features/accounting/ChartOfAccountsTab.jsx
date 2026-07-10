@@ -25,16 +25,16 @@ export default function ChartOfAccountsTab({ canEdit }) {
     enabled: !!txAccount,
   });
 
-  const accountForm = useForm({ initialValues: { name: '', type: 'Bank', opening: 0 } });
+  const accountForm = useForm({ initialValues: { name: '', type: 'Bank', opening: '' } });
   const txForm = useForm({
-    initialValues: { account: '', type: 'Deposit', date: new Date().toISOString().slice(0, 10), amount: 0, note: '' },
+    initialValues: { account: '', type: 'Deposit', date: new Date().toISOString().slice(0, 10), amount: '', note: '' },
   });
 
   const refreshAccounts = () => queryClient.invalidateQueries({ queryKey: ['accounting', 'accounts'] });
 
   const handleCreateAccount = async (values) => {
     try {
-      await createAccount(values);
+      await createAccount({ ...values, opening: values.opening === '' ? 0 : values.opening });
       notifications.show({ color: 'green', message: 'Account created' });
       setNewAccountOpen(false);
       accountForm.reset();
@@ -65,7 +65,7 @@ export default function ChartOfAccountsTab({ canEdit }) {
         </Group>
       )}
 
-      <Table.ScrollContainer minWidth={600}>
+      <Table.ScrollContainer minWidth={600} scrollAreaProps={{ viewportProps: { tabIndex: 0, role: 'region', 'aria-label': 'Table, scrollable horizontally' } }}>
         <Table striped highlightOnHover verticalSpacing="sm">
           <Table.Thead>
             <Table.Tr>
@@ -73,7 +73,7 @@ export default function ChartOfAccountsTab({ canEdit }) {
               <Table.Th>Type</Table.Th>
               <Table.Th>Opening</Table.Th>
               <Table.Th>Running Balance</Table.Th>
-              <Table.Th></Table.Th>
+              <Table.Th>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>

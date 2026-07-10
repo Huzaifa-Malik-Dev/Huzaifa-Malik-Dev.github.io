@@ -26,11 +26,11 @@ export default function ProductsTab({ canEdit }) {
   const segmentOptions = segments.map((s) => ({ value: s._id, label: s.name }));
 
   const form = useForm({
-    initialValues: { title: '', cat: '', segmentId: '', price: 0 },
+    initialValues: { title: '', cat: '', segmentId: '', price: '' },
   });
 
   const editForm = useForm({
-    initialValues: { title: '', cat: '', segmentId: '', price: 0 },
+    initialValues: { title: '', cat: '', segmentId: '', price: '' },
   });
 
   const refresh = () => {
@@ -50,7 +50,7 @@ export default function ProductsTab({ canEdit }) {
 
   const handleCreate = async (values) => {
     try {
-      await createProduct({ ...values, segmentId: values.segmentId || null });
+      await createProduct({ ...values, segmentId: values.segmentId || null, price: values.price === '' ? 0 : values.price });
       notifications.show({ color: 'green', message: 'Product created' });
       setCreateOpen(false);
       form.reset();
@@ -62,7 +62,7 @@ export default function ProductsTab({ canEdit }) {
 
   const handleEdit = async (values) => {
     try {
-      await updateProduct(editRow._id, { ...values, segmentId: values.segmentId || null });
+      await updateProduct(editRow._id, { ...values, segmentId: values.segmentId || null, price: values.price === '' ? 0 : values.price });
       notifications.show({ color: 'green', message: 'Product updated' });
       setEditRow(null);
       refresh();
@@ -122,7 +122,7 @@ export default function ProductsTab({ canEdit }) {
         ? [
             {
               id: 'action',
-              header: '',
+              header: 'Actions',
               cell: (info) => {
                 const row = info.row.original;
                 return (

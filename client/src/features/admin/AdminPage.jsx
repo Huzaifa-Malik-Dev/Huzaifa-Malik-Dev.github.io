@@ -7,7 +7,7 @@ import PermissionsPage from './PermissionsPage';
 export default function AdminPage() {
   return (
     <Stack>
-      <Title order={3}>Admin / Settings</Title>
+      <Title order={1} size="h3">Admin / Settings</Title>
       <PermissionsPage />
     </Stack>
   );

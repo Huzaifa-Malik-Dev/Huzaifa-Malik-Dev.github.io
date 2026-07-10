@@ -1,5 +1,5 @@
 import { Stack, Title, Tabs, Paper, Group, Button, Text } from '@mantine/core';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -12,6 +12,7 @@ import HrDashboardTab from './HrDashboardTab';
 export default function HrPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const canEdit = user.editModules?.includes('hr');
   const canAddEmployee = user.editModules?.includes('hr.addEmployee');
@@ -24,10 +25,15 @@ export default function HrPage() {
     { value: 'passport', label: 'Passport Management', permKey: 'hr.passportManagement' },
   ].filter((t) => user.modules?.includes(t.permKey));
 
+  // The active tab lives in the URL (not local state) so it survives a full remount - e.g.
+  // clicking into an employee then back should return to the same tab, not always the first
+  // one. Falls back to the first permitted tab if the URL has none/a stale value.
+  const activeTab = tabs.some((t) => t.value === searchParams.get('tab')) ? searchParams.get('tab') : tabs[0]?.value;
+
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={3}>HR</Title>
+        <Title order={1} size="h3">HR</Title>
         <Group gap="sm">
           <ImportExportBar
             moduleKey="hr"
@@ -48,7 +54,7 @@ export default function HrPage() {
       {tabs.length === 0 ? (
         <Text c="dimmed" size="sm">You don't have access to any HR sections.</Text>
       ) : (
-        <Tabs defaultValue={tabs[0].value}>
+        <Tabs value={activeTab} onChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
           <Tabs.List>
             {tabs.map((t) => <Tabs.Tab key={t.value} value={t.value}>{t.label}</Tabs.Tab>)}
           </Tabs.List>

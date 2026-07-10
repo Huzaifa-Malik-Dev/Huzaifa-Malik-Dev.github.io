@@ -3,7 +3,7 @@ const requireAuth = require('../middlewares/auth');
 const { requireRole, requireModule, requireAction, requireImportExport } = require('../middlewares/rbac');
 const upload = require('../middlewares/upload');
 const uploadZip = require('../middlewares/uploadZip');
-const { list, getOne, create, update, history, uploadDoc, exportEmployees, importEmployees, complianceSummary } = require('../controllers/userController');
+const { list, getOne, getByEmployeeId, create, update, history, uploadDoc, exportEmployees, importEmployees, complianceSummary } = require('../controllers/userController');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin', 'hr'));
@@ -12,6 +12,7 @@ router.get('/export', requireModule('hr'), requireImportExport('hr'), exportEmpl
 router.post('/import', requireModule('hr', { edit: true }), requireImportExport('hr'), uploadZip.single('file'), importEmployees);
 router.get('/compliance-summary', requireModule('hr'), complianceSummary);
 router.get('/', requireModule('hr'), list);
+router.get('/by-employee-id/:employeeId', requireModule('hr'), getByEmployeeId);
 router.get('/:id', requireModule('hr'), getOne);
 router.get('/:id/history', requireModule('hr'), history);
 router.post('/', requireModule('hr', { edit: true }), requireAction('hr.addEmployee'), create);

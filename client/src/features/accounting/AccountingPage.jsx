@@ -1,4 +1,5 @@
 import { Stack, Title, Tabs, SimpleGrid, Paper, Text } from '@mantine/core';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { fetchSummary } from '../../api/accounting';
@@ -22,7 +23,10 @@ function StatCard({ label, value, sub, color }) {
 
 export default function AccountingPage() {
   const { user } = useAuth();
-  const canEdit = user.editModules?.includes('accounting');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const canEditCoa = user.editModules?.includes('accounting.chartOfAccounts');
+  const canEditExpenses = user.editModules?.includes('accounting.expenses');
+  const canEditCheques = user.editModules?.includes('accounting.cheques');
 
   const summaryQuery = useQuery({ queryKey: ['accounting', 'summary'], queryFn: fetchSummary });
   const s = summaryQuery.data?.data;
@@ -33,9 +37,11 @@ export default function AccountingPage() {
     { value: 'cheques', label: 'Cheques', permKey: 'accounting.cheques' },
   ].filter((t) => user.modules?.includes(t.permKey));
 
+  const activeTab = tabs.some((t) => t.value === searchParams.get('tab')) ? searchParams.get('tab') : tabs[0]?.value;
+
   return (
     <Stack>
-      <Title order={3}>Accounting</Title>
+      <Title order={1} size="h3">Accounting</Title>
 
       <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }}>
         <StatCard label="Total Cash & Bank" value={AED(s?.totalCash)} sub={`${s?.accountsCount || 0} accounts`} color="green" />
@@ -47,24 +53,24 @@ export default function AccountingPage() {
       {tabs.length === 0 ? (
         <Text c="dimmed" size="sm">You don't have access to any Accounting sections.</Text>
       ) : (
-        <Tabs defaultValue={tabs[0].value}>
+        <Tabs value={activeTab} onChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
           <Tabs.List>
             {tabs.map((t) => <Tabs.Tab key={t.value} value={t.value}>{t.label}</Tabs.Tab>)}
           </Tabs.List>
 
           {tabs.some((t) => t.value === 'coa') && (
             <Tabs.Panel value="coa" pt="md">
-              <ChartOfAccountsTab canEdit={canEdit} />
+              <ChartOfAccountsTab canEdit={canEditCoa} />
             </Tabs.Panel>
           )}
           {tabs.some((t) => t.value === 'expenses') && (
             <Tabs.Panel value="expenses" pt="md">
-              <ExpensesTab canEdit={canEdit} />
+              <ExpensesTab canEdit={canEditExpenses} />
             </Tabs.Panel>
           )}
           {tabs.some((t) => t.value === 'cheques') && (
             <Tabs.Panel value="cheques" pt="md">
-              <ChequesTab canEdit={canEdit} />
+              <ChequesTab canEdit={canEditCheques} />
             </Tabs.Panel>
           )}
         </Tabs>

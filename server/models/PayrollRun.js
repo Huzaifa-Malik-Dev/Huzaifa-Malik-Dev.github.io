@@ -12,6 +12,9 @@ const payrollRunSchema = new mongoose.Schema(
     totalNet: { type: Number, default: 0 },
     totalGratuityAccrual: { type: Number, default: 0 },
     processedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    // Employees deliberately excluded from this specific run (e.g. on unpaid leave) - kept for
+    // audit purposes, doesn't affect any other run.
+    skippedEmployees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: true }
 );

@@ -5,6 +5,7 @@ import { notifications } from '../../utils/toast';
 import { fetchEmployees, updateEmployee } from '../../api/hr';
 import { useConfirm } from '../../context/ConfirmContext';
 import { colorFor, initials } from '../../utils/avatar';
+import { employeeUrlId } from './employeeUrl';
 
 // Full reporting chain this app has: Sales Head -> Teams Head -> Team Leader -> Agent.
 // Rendered as a tree (Teams Head as the expandable top level, indentation shows depth) so the
@@ -19,7 +20,7 @@ function PersonLabel({ person, navigate, size = 'sm' }) {
           size={size}
           fw={600}
           style={{ cursor: 'pointer' }}
-          onClick={() => navigate(`/hr/${person._id}`)}
+          onClick={() => navigate(`/hr/employees/${employeeUrlId(person.employeeId)}`)}
           title="Open profile"
         >
           {person.name}

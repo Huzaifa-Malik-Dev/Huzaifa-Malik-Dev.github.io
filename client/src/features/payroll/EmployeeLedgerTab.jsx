@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Group, Modal, Stack, Select, NumberInput, TextInput, Badge, Text } from '@mantine/core';
+import { Button, Group, Modal, Stack, Select, Radio, NumberInput, TextInput, Badge, Text } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '../../utils/toast';
@@ -8,15 +8,21 @@ import DataTable from '../../components/DataTable';
 import { usePagedList } from '../../hooks/usePagedList';
 import { fetchLedger, createLedgerEntry } from '../../api/payroll';
 import { fetchEmployees } from '../../api/hr';
+import { useAuth } from '../../context/AuthContext';
 
 function AED(n) {
   return `AED ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 const STATUS_COLOR = { Open: 'yellow', Settled: 'green' };
-const TYPE_COLOR = { Advance: 'blue', Loan: 'violet', Deduction: 'gray' };
+const TYPE_COLOR = { Advance: 'blue', Loan: 'violet', Deduction: 'gray', Salary: 'green', Bonus: 'teal', Reimbursement: 'cyan' };
+// Same simplification as the per-employee Ledger section: Deduct -> Deduction (open debit,
+// auto-collected next payroll run), Add -> Bonus (settled credit) with the reason as the note.
+const ACTION_TO_TYPE = { deduct: 'Deduction', add: 'Bonus' };
 
-export default function EmployeeLedgerTab({ canEdit }) {
+export default function EmployeeLedgerTab() {
+  const { user } = useAuth();
+  const canEdit = user.editModules?.includes('payroll.ledger');
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -29,13 +35,18 @@ export default function EmployeeLedgerTab({ canEdit }) {
   const employees = employeesQuery.data?.data || [];
 
   const form = useForm({
-    initialValues: { employee: '', date: new Date().toISOString().slice(0, 10), type: 'Advance', amount: 0, note: '' },
+    initialValues: { employee: '', date: new Date().toISOString().slice(0, 10), action: 'deduct', amount: '', note: '' },
+    validate: {
+      amount: (v) => (v === '' || v === null ? 'Amount is required' : null),
+      note: (v, values) => (values.action === 'add' && !v.trim() ? 'Reason is required' : null),
+    },
   });
 
   const handleCreate = async (values) => {
     try {
-      await createLedgerEntry(values);
-      notifications.show({ color: 'green', message: `${values.type} recorded` });
+      const type = ACTION_TO_TYPE[values.action];
+      await createLedgerEntry({ employee: values.employee, date: values.date, amount: values.amount, note: values.note, type });
+      notifications.show({ color: 'green', message: `${type} recorded` });
       setCreateOpen(false);
       form.reset();
       queryClient.invalidateQueries({ queryKey: ['payroll', 'ledger'] });
@@ -83,20 +94,25 @@ export default function EmployeeLedgerTab({ canEdit }) {
         <form onSubmit={form.onSubmit(handleCreate)}>
           <Stack gap="sm">
             <Select label="Employee" data={employees.map((e) => ({ value: e._id, label: `${e.employeeId} - ${e.name}` }))} required {...form.getInputProps('employee')} />
-            <Select
-              label="Type"
-              data={[
-                { value: 'Advance', label: 'Advance' },
-                { value: 'Loan', label: 'Loan' },
-                { value: 'Deduction', label: 'Deduction (manual)' },
-              ]}
-              required
-              {...form.getInputProps('type')}
-            />
+            <Radio.Group label="Action" required {...form.getInputProps('action')}>
+              <Group mt={4}>
+                <Radio value="deduct" label="Deduct Amount" />
+                <Radio value="add" label="Add Amount" />
+              </Group>
+            </Radio.Group>
+            <Text size="xs" c="dimmed">
+              {form.values.action === 'deduct'
+                ? 'Deducted in full from this employee\'s next payroll run.'
+                : 'Recorded as already paid to this employee.'}
+            </Text>
             <TextInput type="date" label="Date" required {...form.getInputProps('date')} />
-            <NumberInput label="Amount (AED)" min={0.01} required {...form.getInputProps('amount')} />
-            <Text size="xs" c="dimmed">Deducted in full on this employee's next payroll run.</Text>
-            <TextInput label="Note" {...form.getInputProps('note')} />
+            <NumberInput label="Amount (AED)" min={0} required {...form.getInputProps('amount')} />
+            <TextInput
+              label={form.values.action === 'add' ? 'Reason' : 'Note (optional)'}
+              placeholder={form.values.action === 'add' ? 'e.g. Bonus, Reimbursement...' : undefined}
+              required={form.values.action === 'add'}
+              {...form.getInputProps('note')}
+            />
             <Button type="submit" mt="sm">Save</Button>
           </Stack>
         </form>
