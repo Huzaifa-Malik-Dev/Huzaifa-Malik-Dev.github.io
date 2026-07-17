@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
-const { ORDER_STATUS, ETISALAT_STATUS, SR_TYPES } = require('../utils/constants');
+const { ORDER_STATUS, ETISALAT_STATUS, LINKED_STATUS } = require('../utils/constants');
+const { lineItemBlockSchema } = require('./schemas/lineItem');
 
 const historyEntrySchema = new mongoose.Schema(
   { ts: { type: Date, default: Date.now }, userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, text: String },
@@ -34,20 +35,27 @@ const orderSchema = new mongoose.Schema(
     customer: { type: String, required: true },
     pid: { type: String, default: '' },
     eOrderNo: { type: String, default: '' },
-    // Subscription type - closed set (see SR_TYPES), same as Pipeline.sr, which this is normally
-    // copied from when the order opens (see workflow.ensureOrderForPipeline).
-    sr: { type: String, enum: SR_TYPES, default: 'NEW' },
-    cat: { type: String, default: '' },
-    product: { type: String, default: '' },
+
+    // One or more {Category, Product, Subscription Type} blocks, each with one or more
+    // {price, qty} rows - see models/schemas/lineItem.js. Replaces the old flat
+    // cat/product/sr/qty/price fields. Normally copied straight from the backing Pipeline deal's
+    // own lineItems when the order opens (see workflow.ensureOrderForPipeline).
+    lineItems: {
+      type: [lineItemBlockSchema],
+      default: () => [{ cat: '', product: '', sr: '', rows: [{ price: 0, qty: 1, mrc: 0 }], blockMrc: 0 }],
+    },
     contract: { type: String, default: '12 Months' },
-    qty: { type: Number, default: 1 },
-    price: { type: Number, default: 0 },
-    // Always derived as price * qty, recomputed server-side whenever either changes - never
-    // accepted directly from client input (see orderController.js).
+    // Always derived as the sum of every block/row's mrc, recomputed server-side whenever
+    // lineItems changes - never accepted directly from client input (see utils/lineItems.js).
     mrc: { type: Number, default: 0 },
     eAcctMgr: { type: String, default: '' },
     status: { type: String, enum: ORDER_STATUS, default: 'New' },
     actDate: { type: String, default: '' },
+    // Reconciliation flag set once the order is done (Activated/Closed) - the successor to the
+    // old 'In Line'/'Not In Line' ORDER_STATUS values. 'Linked' reproduces the exact same lock
+    // 'In Line' used to enforce (see workflow.updateOrderStatus / orderController.update): no more
+    // field edits or status changes except to 'Cancelled'. '' = not yet assessed (default).
+    linked: { type: String, enum: [...LINKED_STATUS, ''], default: '' },
     commission: { type: Number, default: 0 },
     remarks: { type: String, default: '' },
     // Escape hatch for an agent/TL who spots a mistake after the deal is already locked in Back
@@ -60,6 +68,14 @@ const orderSchema = new mongoose.Schema(
     correctionRequestedAt: { type: Date, default: null },
     correctionNote: { type: String, default: '' },
     correctionCount: { type: Number, default: 0 },
+    // Cancellation request - mandatory-reason + Sales Head approval workflow (see
+    // workflow.requestOrderCancellation/approveOrderCancellation/rejectOrderCancellation).
+    // Mutually exclusive with a pending correction request at any given time.
+    cancellationRequested: { type: Boolean, default: false },
+    cancellationRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    cancellationRequestedAt: { type: Date, default: null },
+    cancellationReason: { type: String, default: '' },
+    cancellationRejectionReason: { type: String, default: '' },
     history: [historyEntrySchema],
   },
   { timestamps: true }

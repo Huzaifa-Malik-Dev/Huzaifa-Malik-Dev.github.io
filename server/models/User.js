@@ -58,6 +58,15 @@ const userSchema = new mongoose.Schema(
     email: { type: String, default: '', lowercase: true, trim: true },
     phone: { type: String, default: '' },
     passwordHash: { type: String, required: true },
+    // Server-side session revocation: every JWT carries the tokenVersion it was issued at (see
+    // utils/jwt.js), and middlewares/auth.js rejects any token whose version no longer matches.
+    // Bumping this instantly invalidates every outstanding token for this user - which is what
+    // logout, a self-service password change, and an admin password reset all rely on.
+    //
+    // MUST stay declared here: Mongoose silently drops writes to paths that aren't in the schema,
+    // so without this field every one of those bumps is a no-op and none of them actually revoke
+    // anything (a logged-out cookie keeps working).
+    tokenVersion: { type: Number, default: 0 },
     role: { type: String, required: true, enum: Object.keys(ROLES) },
     desig: { type: String, default: '' },
     dept: { type: String, default: '' },

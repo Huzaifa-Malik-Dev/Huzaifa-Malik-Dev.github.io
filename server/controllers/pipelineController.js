@@ -13,26 +13,48 @@ const {
   tlReject,
   ensureOrderForPipeline,
   requestOrderCorrection,
+  requestOrderCancellation,
 } = require('../services/workflow');
-const { PIPE_STAGES, SR_TYPES } = require('../utils/constants');
+const { PIPE_STAGES, SR_TYPES, CATEGORIES } = require('../utils/constants');
+const { recomputeLineItems } = require('../utils/lineItems');
 const { sendXlsx, parseXlsxBuffer, cell, resolveAgentFromRow } = require('../utils/importExport');
 const AppError = require('../utils/AppError');
 const { logActivity, diffFields } = require('../utils/activityLog');
-const { attachIsNew } = require('../services/recordViews');
+const { attachIsNew, markManyViewed } = require('../services/recordViews');
 
 const PIPELINE_FIELD_LABELS = {
-  cat: 'Category', product: 'Product', sr: 'SR', price: 'Price', qty: 'Qty', email: 'Email',
-  stage: 'Stage', startedDate: 'Started Date', expectedCloseDate: 'Expected Close Date',
-  director: 'Director', remarks: 'Remarks',
+  email: 'Email', contactNo: 'Contact No', stage: 'Stage', startedDate: 'Started Date',
+  expectedCloseDate: 'Expected Close Date', director: 'Director', remarks: 'Remarks',
 };
+
+// One {Category, Product, Subscription Type} block with one or more {price, qty} rows - see
+// models/schemas/lineItem.js. mrc/blockMrc are deliberately absent: always recomputed server-side
+// (utils/lineItems.js), never accepted from the client.
+const lineItemsSchema = z.array(
+  z.object({
+    cat: z.enum(CATEGORIES, { errorMap: () => ({ message: 'Category is required on every line item' }) }),
+    product: z.string().trim().min(1, 'Product is required on every line item'),
+    sr: z.enum(SR_TYPES, { errorMap: () => ({ message: 'Subscription Type is required on every line item' }) }),
+    rows: z
+      .array(z.object({ price: z.number().positive('Unit Price is required on every row'), qty: z.number().min(1, 'Quantity is required on every row') }))
+      .min(1, 'Every line item needs at least one price/quantity row'),
+  })
+).min(1, 'At least one line item is required');
+
+// Lenient counterpart for the initial DSR->Pipeline conversion, where a deal is legitimately
+// created before its line items are known (the agent fills them in afterward).
+const draftLineItemsSchema = z.array(
+  z.object({
+    cat: z.union([z.enum(CATEGORIES), z.literal('')]).optional().default(''),
+    product: z.string().optional().default(''),
+    sr: z.union([z.enum(SR_TYPES), z.literal('')]).optional().default(''),
+    rows: z.array(z.object({ price: z.number().min(0).optional().default(0), qty: z.number().min(1).optional().default(1) })).optional(),
+  })
+);
 
 const convertSchema = z.object({
   dsrId: z.string().min(1),
-  cat: z.string().optional(),
-  product: z.string().optional(),
-  sr: z.enum(SR_TYPES).optional(),
-  price: z.number().optional(),
-  qty: z.number().optional(),
+  lineItems: draftLineItemsSchema.optional(),
   email: z.string().optional(),
   remarks: z.string().optional(),
 });
@@ -43,12 +65,9 @@ const reasonSchema = z.object({ reason: z.string().optional() });
 // changed via this endpoint (unknown keys are stripped by zod's default object() behavior, so a
 // client that still sends it is silently ignored rather than erroring).
 const updateSchema = z.object({
-  cat: z.string().trim().min(1, 'Category is required'),
-  product: z.string().trim().min(1, 'Product is required'),
-  sr: z.enum(SR_TYPES, { errorMap: () => ({ message: 'Subscription Type is required' }) }),
-  price: z.number().positive('Price is required'),
-  qty: z.number().min(1, 'Quantity is required'),
+  lineItems: lineItemsSchema,
   email: z.string().trim().min(1, 'Customer Email is required'),
+  contactNo: z.string().optional(),
   stage: z.enum(PIPE_STAGES).optional(),
   expectedCloseDate: z.string().trim().min(1, 'Expected Close Date is required'),
   director: z.string().optional(),
@@ -75,8 +94,11 @@ async function list(req, res, next) {
       const matchingAgents = await User.find({ name: re }).select('_id').lean();
       filter.$and = [
         { $or: [
-            ...regexOr(term, ['dsrNo', 'company', 'customer', 'product', 'stage', 'approval']),
-            ...numericRegexOr(term, ['qty', 'mrc']),
+            // product/cat/sr now live inside the lineItems array - a plain regex on the dotted
+            // path matches if ANY block in the deal matches, which is exactly the search
+            // behaviour you want ("find deals involving product X").
+            ...regexOr(term, ['dsrNo', 'company', 'customer', 'lineItems.product', 'lineItems.cat', 'lineItems.sr', 'stage', 'approval']),
+            ...numericRegexOr(term, ['mrc']),
             { agentId: { $in: matchingAgents.map((u) => u._id) } },
         ] },
       ];
@@ -113,20 +135,34 @@ async function getOne(req, res, next) {
       if (!inScope) throw new AppError('You do not have access to this deal', 403);
     }
 
-    // Surfaced so the deal panel can show correction status without the client needing to know
-    // an order id it was never given (see requestCorrection above, which resolves the same way).
+    // Surfaced so the deal panel can show correction/cancellation status without the client needing
+    // to know an order id it was never given (see requestCorrection below, which resolves the same way).
     const order = await Order.findOne({ pipelineId: pipeline._id })
-      .select('status correctionRequested correctionRequestedBy correctionRequestedAt correctionNote correctionCount')
+      .select(
+        'status linked correctionRequested correctionRequestedBy correctionRequestedAt correctionNote correctionCount ' +
+          'cancellationRequested cancellationRequestedBy cancellationRequestedAt cancellationReason cancellationRejectionReason'
+      )
       .populate('correctionRequestedBy', 'name')
+      .populate('cancellationRequestedBy', 'name')
       .lean();
     pipeline.orderCorrection = order
       ? {
           status: order.status,
+          linked: order.linked,
           requested: order.correctionRequested,
           requestedBy: order.correctionRequestedBy?.name || null,
           requestedAt: order.correctionRequestedAt,
           note: order.correctionNote,
           count: order.correctionCount,
+        }
+      : null;
+    pipeline.orderCancellation = order
+      ? {
+          requested: order.cancellationRequested,
+          requestedBy: order.cancellationRequestedBy?.name || null,
+          requestedAt: order.cancellationRequestedAt,
+          reason: order.cancellationReason,
+          rejectionReason: order.cancellationRejectionReason,
         }
       : null;
 
@@ -163,8 +199,11 @@ async function update(req, res, next) {
     if (!allowed) throw new AppError('You cannot edit this deal', 403);
 
     // Once a deal is awaiting TL approval, the agent who owns it can no longer change it (only
-    // the TL/admin reviewing it can) - and once the TL has approved it, nobody can edit it here
-    // at all, since the order that Back Office now owns is the source of truth from that point.
+    // the TL/admin reviewing it can) - and once the TL has approved it, the order Back Office now
+    // owns is the source of truth, so nobody but an admin can edit it here. An admin still can
+    // (for correcting a genuine error without the full send-back-for-correction ceremony), but
+    // every such edit is labelled as an override in history/activity log rather than looking like
+    // a routine edit - see adminOverride below.
     if (!isAdmin) {
       if (pipeline.approval === 'approved') {
         throw new AppError('This deal has been approved and sent to Back Office — it can no longer be edited here', 400);
@@ -173,23 +212,32 @@ async function update(req, res, next) {
         throw new AppError('This deal is awaiting Team Leader approval and cannot be edited until then', 400);
       }
     }
+    const adminOverride = isAdmin && pipeline.approval === 'approved';
 
     const fields = parsed.data;
     const before = {};
     Object.keys(PIPELINE_FIELD_LABELS).forEach((k) => { before[k] = pipeline[k]; });
+    const beforeLineItems = JSON.stringify(recomputeLineItems(pipeline.lineItems).lineItems);
     const oldStage = pipeline.stage;
     Object.assign(pipeline, fields);
-    const price = fields.price ?? pipeline.price;
-    const qty = fields.qty ?? pipeline.qty;
-    if (fields.price !== undefined || fields.qty !== undefined) {
-      pipeline.mrc = price * qty;
-      pipeline.annual = pipeline.mrc * 12;
-    }
-    pipeline.history.push({ userId: req.user._id, text: 'Deal details edited' });
+    const { lineItems, mrc } = recomputeLineItems(fields.lineItems);
+    pipeline.lineItems = lineItems;
+    pipeline.mrc = mrc;
+    pipeline.annual = mrc * 12;
+    pipeline.history.push({
+      userId: req.user._id,
+      text: adminOverride ? 'Admin override edit while approved' : 'Deal details edited',
+    });
     await pipeline.save();
 
     const changes = diffFields(before, pipeline.toObject(), PIPELINE_FIELD_LABELS);
-    if (changes.length) logActivity(req.user, `edited deal ${pipeline.dsrNo} (${pipeline.company}): ${changes.join(', ')}`);
+    // lineItems is a nested array of objects - diffFields' generic display would render it as
+    // unreadable noise, so it gets its own plain marker instead of a value diff.
+    if (JSON.stringify(lineItems) !== beforeLineItems) changes.push('Line items updated');
+    if (changes.length) {
+      const prefix = adminOverride ? 'ADMIN OVERRIDE — edited approved deal' : 'edited deal';
+      logActivity(req.user, `${prefix} ${pipeline.dsrNo} (${pipeline.company}): ${changes.join(', ')}`);
+    }
 
     // Reaching 100% opens (or updates) the Back Office order, same as a TL approval does -
     // whichever path gets there first.
@@ -247,16 +295,43 @@ async function requestCorrection(req, res, next) {
   }
 }
 
+// Same reasoning as requestCorrection above - the agent/TL only knows their Pipeline deal, so this
+// resolves the linked order internally. Directly-created Back Office orders (no pipelineId) can't
+// reach this route at all; they use routes/orderCancellations.js, which works off an order id.
+async function requestCancellation(req, res, next) {
+  try {
+    const order = await Order.findOne({ pipelineId: req.params.id });
+    if (!order) throw new AppError('No Back Office order exists yet for this deal', 404);
+    const parsed = reasonSchema.safeParse(req.body);
+    const result = await requestOrderCancellation(order._id, req.user, parsed.success ? parsed.data.reason : undefined);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+
+// A deal can carry several line-item blocks, each with several price/qty rows, but a spreadsheet
+// cell is flat - so each dimension is joined into one cell rather than exploding one deal across
+// many rows (which would break the one-row-per-deal shape every other column here assumes).
+function joinBlocks(row, pick) {
+  return (row.lineItems || []).map(pick).join('; ');
+}
+function joinRows(row, pick) {
+  return (row.lineItems || []).map((b) => (b.rows || []).map(pick).join(' + ')).join('; ');
+}
+
 const EXPORT_COLUMNS = [
   { header: 'DSR No', key: 'dsrNo' },
   { header: 'Company', key: 'company' },
   { header: 'Customer', key: 'customer' },
   { header: 'Email', key: 'email' },
-  { header: 'Category', key: 'cat' },
-  { header: 'Product', key: 'product' },
-  { header: 'SR', key: 'sr' },
-  { header: 'Price', key: 'price' },
-  { header: 'Qty', key: 'qty' },
+  { header: 'Contact No', key: 'contactNo' },
+  { header: 'Category', get: (r) => joinBlocks(r, (b) => b.cat || '') },
+  { header: 'Product', get: (r) => joinBlocks(r, (b) => b.product || '') },
+  { header: 'SR', get: (r) => joinBlocks(r, (b) => b.sr || '') },
+  { header: 'Price', get: (r) => joinRows(r, (row) => row.price) },
+  { header: 'Qty', get: (r) => joinRows(r, (row) => row.qty) },
   { header: 'MRC', key: 'mrc' },
   { header: 'Annual', key: 'annual' },
   { header: 'Stage', key: 'stage' },
@@ -285,12 +360,14 @@ async function exportPipeline(req, res, next) {
 // A Pipeline deal always needs a backing DSR (dsrId is required — see models/Pipeline.js), so an
 // imported row gets a minimal companion "Lead Generated" DSR created for it first, same as a real
 // agent would log a call before converting it — this keeps every rollup/history path consistent.
+// A spreadsheet row is inherently flat, so an imported row always becomes a deal with exactly one
+// line-item block/row - multi-block deals are built in the UI afterward, not imported.
 const importRowSchema = z.object({
   company: z.string().trim().min(1, 'Company is required'),
   contactNo: z.string().trim().min(1, 'Contact No is required'),
   email: z.string().optional().default(''),
   customer: z.string().optional().default(''),
-  cat: z.string().optional().default(''),
+  cat: z.preprocess((v) => (v === '' ? undefined : v), z.enum(CATEGORIES, { errorMap: () => ({ message: `Category must be one of: ${CATEGORIES.join(', ')}` }) }).optional()),
   product: z.string().optional().default(''),
   sr: z.preprocess((v) => (v === '' ? undefined : v), z.enum(SR_TYPES, { errorMap: () => ({ message: `SR must be one of: ${SR_TYPES.join(', ')}` }) }).optional()),
   price: z.number().min(0).optional().default(0),
@@ -309,6 +386,7 @@ async function importPipeline(req, res, next) {
 
     const errors = [];
     let created = 0;
+    const createdIds = []; // marked viewed for the importer in one bulk write at the end
 
     for (let i = 0; i < rawRows.length; i += 1) {
       const raw = rawRows[i];
@@ -365,8 +443,10 @@ async function importPipeline(req, res, next) {
           history: [{ userId: req.user._id, text: 'DSR auto-created for imported pipeline deal' }],
         });
 
-        const mrc = body.qty * body.price;
-        await Pipeline.create({
+        const { lineItems, mrc } = recomputeLineItems([
+          { cat: body.cat || '', product: body.product, sr: body.sr || '', rows: [{ price: body.price, qty: body.qty }] },
+        ]);
+        const importedDeal = await Pipeline.create({
           dsrId: dsr._id,
           dsrNo: dsr.dsrNo,
           agentId: agent._id,
@@ -376,11 +456,8 @@ async function importPipeline(req, res, next) {
           company: body.company,
           customer: body.customer,
           email: body.email,
-          cat: body.cat,
-          product: body.product,
-          sr: body.sr,
-          price: body.price,
-          qty: body.qty,
+          contactNo: body.contactNo,
+          lineItems,
           mrc,
           annual: mrc * 12,
           stage: body.stage,
@@ -392,11 +469,15 @@ async function importPipeline(req, res, next) {
           remarks: body.remarks,
           history: [{ userId: req.user._id, text: 'Deal imported from spreadsheet' }],
         });
+        createdIds.push(importedDeal._id);
         created += 1;
       } catch (rowErr) {
         errors.push({ row: rowNum, message: rowErr.message || 'Unexpected error' });
       }
     }
+
+    // The importer created these, so they must not come back highlighted as new to them.
+    await markManyViewed(req.user._id, 'pipeline', createdIds);
 
     logActivity(req.user, `imported pipeline deals from spreadsheet: ${created} created, ${errors.length} failed, ${rawRows.length} rows total`);
     res.json({ data: { total: rawRows.length, created, failed: errors.length, errors } });
@@ -405,4 +486,17 @@ async function importPipeline(req, res, next) {
   }
 }
 
-module.exports = { list, getOne, create, update, escalateTl, approve, reject, requestCorrection, exportPipeline, importPipeline };
+module.exports = {
+  list,
+  getOne,
+  create,
+  update,
+  escalateTl,
+  approve,
+  reject,
+  requestCorrection,
+  requestCancellation,
+  exportPipeline,
+  importPipeline,
+  scopeFilter,
+};

@@ -240,6 +240,56 @@ async function update(req, res, next) {
   }
 }
 
+// Unambiguous alphabet - no O/0, I/l/1 - because this password gets read off a screen and typed
+// (or dictated) by hand. 12 chars from a 58-char set is ~70 bits of entropy, far beyond anything
+// guessable, while staying short enough to pass along without mistakes.
+const TEMP_PASSWORD_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+const TEMP_PASSWORD_LENGTH = 12;
+
+// crypto.randomInt (not Math.random) - this is a credential, so it needs a CSPRNG. The modulo-free
+// randomInt avoids the bias a naive `% length` would introduce.
+function generateTempPassword() {
+  let out = '';
+  for (let i = 0; i < TEMP_PASSWORD_LENGTH; i += 1) {
+    out += TEMP_PASSWORD_ALPHABET[crypto.randomInt(TEMP_PASSWORD_ALPHABET.length)];
+  }
+  return out;
+}
+
+// Admin-only password reset for someone who's locked out. The server generates the password rather
+// than letting the admin choose one (an admin-invented password is predictable, and tends to get
+// reused across people), returns it exactly once for the admin to hand over, and never stores or
+// logs the plaintext - only the hash is kept, and the activity log records that a reset happened,
+// never what it was.
+//
+// Deliberately a route of its own rather than PATCH /users/:id's loose `password` field: that path
+// takes whatever string it's given with no length check at all, and leaves the target's existing
+// sessions alive - so a reset wouldn't actually eject someone whose account was compromised.
+async function resetPassword(req, res, next) {
+  try {
+    // requireRole('admin','hr') already gates this router; narrow it to admin only here, matching
+    // "give an admin the option to reset the password of any user".
+    if (req.user.role !== 'admin') throw new AppError('Only an admin can reset a password', 403);
+
+    const user = await User.findById(req.params.id);
+    if (!user) throw new AppError('User not found', 404);
+
+    const password = generateTempPassword();
+    user.passwordHash = await hashPassword(password);
+    // Same revocation mechanism as logout/self-change (see authController): every existing token
+    // for this user stops working, so a reset actually locks out whoever was in there.
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save();
+
+    logActivity(req.user, `reset the password for employee ${user.employeeId} (${user.name}) — all of their existing sessions were signed out`);
+    // The only time this value ever leaves the server. Not persisted anywhere; if the admin loses
+    // it before handing it over, they reset again.
+    res.json({ data: { password, username: user.username, name: user.name, employeeId: user.employeeId } });
+  } catch (err) {
+    next(err);
+  }
+}
+
 const UPLOAD_DOC_FIELDS = [
   'profilePic',
   'passportImgF',
@@ -533,4 +583,4 @@ async function history(req, res, next) {
   }
 }
 
-module.exports = { list, getOne, getByEmployeeId, create, update, history, uploadDoc, exportEmployees, importEmployees, complianceSummary };
+module.exports = { list, getOne, getByEmployeeId, create, update, resetPassword, history, uploadDoc, exportEmployees, importEmployees, complianceSummary };

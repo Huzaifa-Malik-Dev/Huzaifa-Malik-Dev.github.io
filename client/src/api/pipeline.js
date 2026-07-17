@@ -8,6 +8,9 @@ export const escalateToTL = (id) => api.post(`/pipeline/${id}/escalate-tl`).then
 export const approvePipeline = (id) => api.post(`/pipeline/${id}/approve`).then((r) => r.data);
 export const rejectPipeline = (id, reason) => api.post(`/pipeline/${id}/reject`, { reason }).then((r) => r.data);
 export const requestPipelineCorrection = (id, reason) => api.post(`/pipeline/${id}/request-correction`, { reason }).then((r) => r.data);
+// Convenience route for the agent/TL, who only knows their Pipeline deal - resolves the linked
+// order server-side. Approve/reject (and cancelling a direct order) live in api/orders.js.
+export const requestPipelineCancellation = (id, reason) => api.post(`/pipeline/${id}/request-cancellation`, { reason }).then((r) => r.data);
 export const exportPipeline = (params) => api.get('/pipeline/export', { params, responseType: 'blob' }).then((r) => r.data);
 export const importPipeline = (file) => {
   const form = new FormData();

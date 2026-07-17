@@ -25,6 +25,7 @@ const Holiday = require('./models/Holiday');
 const LeaveRequest = require('./models/LeaveRequest');
 const Attendance = require('./models/Attendance');
 const ActivityLog = require('./models/ActivityLog');
+const RecordView = require('./models/RecordView');
 const { Counter, nextSeq } = require('./models/Counter');
 const { seedChartOfAccounts, ensureLinkedAccount, postJournalEntry, requireCoaByCode, CODES, EXPENSE_CATEGORY_TO_CODE } = require('./services/journal');
 const { processPayrollRun } = require('./services/payroll');
@@ -33,7 +34,7 @@ const { createLeaveRequest, approveLeaveRequest } = require('./services/leave');
 const { hashPassword } = require('./utils/password');
 const { buildManagerChain, createInitialAssignment } = require('./services/hierarchy');
 const { convertToPipeline, escalateToTL, tlApprove } = require('./services/workflow');
-const { PIPE_STAGES } = require('./utils/constants');
+const { PIPE_STAGES, SR_TYPES } = require('./utils/constants');
 const { ACCESS_DEFAULT, EDIT_ACCESS_DEFAULT, IMPORT_EXPORT_DEFAULT, CALL_STATUS } = require('./utils/constants');
 
 const defUser = (name) => name.toLowerCase().replace(/[^a-z]/g, '');
@@ -84,6 +85,9 @@ async function run() {
   await Promise.all([
     User.deleteMany({}),
     Dsr.deleteMany({}),
+    // Wiped like everything else - these are (userId, module, recordId) rows, so leaving them
+    // behind across a reseed strands them pointing at records that no longer exist.
+    RecordView.deleteMany({}),
     Pipeline.deleteMany({}),
     Order.deleteMany({}),
     Notification.deleteMany({}),
@@ -170,16 +174,19 @@ async function run() {
   }
 
   console.log(`Seeding pipeline from ${leadGeneratedDsrs.length} lead-generated DSRs...`);
+  // Titles/categories here match real entries in the product catalog seeded further below, so a
+  // seeded deal's Product/Category Selects resolve against the catalog rather than relying on the
+  // stale-value fallback.
   const products = [
-    { cat: 'Business Internet', product: 'Business First Plus', price: 395 },
-    { cat: 'Mobile', product: 'SOHO3', price: 150 },
-    { cat: 'Business Internet', product: 'Business Extreme', price: 600 },
+    { cat: 'FIXED', product: 'Business Pro New', price: 400 },
+    { cat: 'GSM', product: 'ATL Plans', price: 125 },
+    { cat: 'DIGITAL', product: 'Cloud', price: 900 },
   ];
-  // Deal detail fields beyond cat/product/price/qty are all mandatory to save a Pipeline record
-  // (see pipelineController.updateSchema) - fill them in here so seeded deals are immediately
-  // eligible for the escalate/approve calls below, matching what a real agent would have to do
-  // on the deal panel before requesting Team Leader approval.
-  const SR_TYPES = ['MNP', 'FNP', 'NEW'];
+  // Deal detail fields beyond the line items are all mandatory to save a Pipeline record (see
+  // pipelineController.updateSchema) - fill them in here so seeded deals are immediately eligible
+  // for the escalate/approve calls below, matching what a real agent would have to do on the deal
+  // panel before requesting Team Leader approval. Every seeded deal gets a single line-item block
+  // with one price/qty row; multi-block deals are a UI-built thing, not worth seeding.
   const pipelines = [];
   for (let i = 0; i < leadGeneratedDsrs.length; i += 1) {
     const dsr = leadGeneratedDsrs[i];
@@ -188,8 +195,11 @@ async function run() {
     const pipeline = await convertToPipeline(
       dsr._id,
       {
-        cat: pr.cat, product: pr.product, price: pr.price, qty: 1 + (i % 4),
-        sr: SR_TYPES[i % SR_TYPES.length], email: `${agent.username}@example.com`, remarks: 'Seed demo deal',
+        lineItems: [
+          { cat: pr.cat, product: pr.product, sr: SR_TYPES[i % SR_TYPES.length], rows: [{ price: pr.price, qty: 1 + (i % 4) }] },
+        ],
+        email: `${agent.username}@example.com`,
+        remarks: 'Seed demo deal',
       },
       agent
     );
@@ -297,45 +307,55 @@ async function run() {
   });
 
   console.log('Seeding product catalog...');
+  // Categories are the fixed CATEGORIES set (utils/constants.js) - the old free-text 'Fixed' /
+  // 'Mobile' / 'Digital' values map onto FIXED / GSM / DIGITAL respectively.
   const catalog = [
-    { cat: 'Fixed', title: 'Business Pro New' },
-    { cat: 'Fixed', title: 'Business Pro Mig' },
-    { cat: 'Fixed', title: 'Business On New' },
-    { cat: 'Fixed', title: 'Business On Mig' },
-    { cat: 'Fixed', title: 'SOHO' },
-    { cat: 'Fixed', title: 'BQS' },
-    { cat: 'Fixed', title: 'Office Presence' },
-    { cat: 'Fixed', title: 'Dell / PABX' },
-    { cat: 'Fixed', title: 'Toll Free' },
-    { cat: 'Fixed', title: 'Digital Internet' },
-    { cat: 'Fixed', title: 'Digital Premium Internet' },
-    { cat: 'Fixed', title: 'SIP Trunk' },
-    { cat: 'Fixed', title: 'PRI' },
-    { cat: 'Fixed', title: 'SD WAN' },
-    { cat: 'Fixed', title: 'Business TV' },
-    { cat: 'Fixed', title: 'Business Flat Plus' },
-    { cat: 'Fixed', title: 'Business Super' },
-    { cat: 'Fixed', title: 'Add Lines' },
-    { cat: 'Fixed', title: 'Global MPLS' },
-    { cat: 'Mobile', title: 'ATL Plans' },
-    { cat: 'Mobile', title: 'BTL Plans' },
-    { cat: 'Mobile', title: 'Data Sims' },
-    { cat: 'Digital', title: 'UTAP' },
-    { cat: 'Digital', title: 'Office 365' },
-    { cat: 'Digital', title: 'Online Marketing' },
-    { cat: 'Digital', title: 'VSAAS' },
-    { cat: 'Digital', title: 'DGTX' },
-    { cat: 'Digital', title: 'M2M' },
-    { cat: 'Digital', title: 'SVT' },
-    { cat: 'Digital', title: 'APP 360' },
-    { cat: 'Digital', title: 'Social eCommerce' },
-    { cat: 'Digital', title: 'Cloud' },
-    { cat: 'Digital', title: 'SMS' },
+    { cat: 'FIXED', title: 'Business Pro New', base: 400 },
+    { cat: 'FIXED', title: 'Business Pro Mig', base: 380 },
+    { cat: 'FIXED', title: 'Business On New', base: 300 },
+    { cat: 'FIXED', title: 'Business On Mig', base: 285 },
+    { cat: 'FIXED', title: 'SOHO', base: 150 },
+    { cat: 'FIXED', title: 'BQS', base: 220 },
+    { cat: 'FIXED', title: 'Office Presence', base: 180 },
+    { cat: 'FIXED', title: 'Dell / PABX', base: 950 },
+    { cat: 'FIXED', title: 'Toll Free', base: 500 },
+    { cat: 'FIXED', title: 'Digital Internet', base: 600 },
+    { cat: 'FIXED', title: 'Digital Premium Internet', base: 1200 },
+    { cat: 'FIXED', title: 'SIP Trunk', base: 450 },
+    { cat: 'FIXED', title: 'PRI', base: 800 },
+    { cat: 'FIXED', title: 'SD WAN', base: 1500 },
+    { cat: 'FIXED', title: 'Business TV', base: 250 },
+    { cat: 'FIXED', title: 'Business Flat Plus', base: 350 },
+    { cat: 'FIXED', title: 'Business Super', base: 700 },
+    { cat: 'FIXED', title: 'Add Lines', base: 90 },
+    { cat: 'FIXED', title: 'Global MPLS', base: 2500 },
+    { cat: 'GSM', title: 'ATL Plans', base: 125 },
+    { cat: 'GSM', title: 'BTL Plans', base: 175 },
+    { cat: 'GSM', title: 'Data Sims', base: 100 },
+    { cat: 'WIRELESS', title: 'Wireless Broadband', base: 300 },
+    { cat: 'WIRELESS', title: 'Fixed Wireless Access', base: 450 },
+    { cat: 'DIGITAL', title: 'UTAP', base: 200 },
+    { cat: 'DIGITAL', title: 'Office 365', base: 120 },
+    { cat: 'DIGITAL', title: 'Online Marketing', base: 500 },
+    { cat: 'DIGITAL', title: 'VSAAS', base: 350 },
+    { cat: 'DIGITAL', title: 'DGTX', base: 400 },
+    { cat: 'DIGITAL', title: 'M2M', base: 80 },
+    { cat: 'DIGITAL', title: 'SVT', base: 260 },
+    { cat: 'DIGITAL', title: 'APP 360', base: 600 },
+    { cat: 'DIGITAL', title: 'Social eCommerce', base: 450 },
+    { cat: 'DIGITAL', title: 'Cloud', base: 900 },
+    { cat: 'DIGITAL', title: 'SMS', base: 60 },
   ];
+  // Price presets per subscription type - what the Unit Price prefills to when that
+  // Product + Subscription Type combination is picked on a deal (always still editable). Seeded
+  // off each product's base price so the prefill is demonstrable end-to-end; real values are
+  // maintained by admin in Products > Pricing.
+  const PRESET_MULTIPLIER = { NEW: 1, MIG: 0.95, MNP: 0.9, FNP: 0.9, 'ADD ON': 0.5, P2P: 0.75 };
   await Product.insertMany(
     catalog.map((p) => ({
       cat: p.cat,
       title: p.title,
+      pricing: SR_TYPES.map((sr) => ({ subscriptionType: sr, defaultPrice: Math.round(p.base * PRESET_MULTIPLIER[sr]) })),
       active: true,
     }))
   );

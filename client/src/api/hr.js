@@ -8,6 +8,9 @@ export const fetchEmployeeByEmployeeId = (employeeId) => api.get(`/users/by-empl
 export const createEmployee = (body) => api.post('/users', body).then((r) => r.data);
 export const updateEmployee = (id, body) => api.patch(`/users/${id}`, body).then((r) => r.data);
 export const fetchEmployeeHistory = (id) => api.get(`/users/${id}/history`).then((r) => r.data);
+// Admin only. The server generates the password and returns it exactly once - it is never stored
+// in plaintext or recoverable afterwards, so if it's lost before being handed over, reset again.
+export const resetEmployeePassword = (id) => api.post(`/users/${id}/reset-password`).then((r) => r.data);
 
 export const uploadEmployeeDoc = (id, field, file) => {
   const formData = new FormData();

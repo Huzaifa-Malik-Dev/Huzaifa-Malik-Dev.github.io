@@ -3,7 +3,7 @@ const requireAuth = require('../middlewares/auth');
 const { requireRole, requireModule, requireAction, requireImportExport } = require('../middlewares/rbac');
 const upload = require('../middlewares/upload');
 const uploadZip = require('../middlewares/uploadZip');
-const { list, getOne, getByEmployeeId, create, update, history, uploadDoc, exportEmployees, importEmployees, complianceSummary } = require('../controllers/userController');
+const { list, getOne, getByEmployeeId, create, update, resetPassword, history, uploadDoc, exportEmployees, importEmployees, complianceSummary } = require('../controllers/userController');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin', 'hr'));
@@ -17,6 +17,8 @@ router.get('/:id', requireModule('hr'), getOne);
 router.get('/:id/history', requireModule('hr'), history);
 router.post('/', requireModule('hr', { edit: true }), requireAction('hr.addEmployee'), create);
 router.patch('/:id', requireModule('hr', { edit: true }), update);
+// The handler narrows this to admin only (the router above also allows hr) - see resetPassword.
+router.post('/:id/reset-password', requireModule('hr', { edit: true }), resetPassword);
 router.post('/:id/upload/:field', requireModule('hr', { edit: true }), upload.single('file'), uploadDoc);
 
 module.exports = router;

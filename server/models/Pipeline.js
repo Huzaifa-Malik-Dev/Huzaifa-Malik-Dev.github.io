@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { PIPE_STAGES, APPROVAL_STATUS } = require('../utils/constants');
+const { lineItemBlockSchema } = require('./schemas/lineItem');
 
 const historyEntrySchema = new mongoose.Schema(
   { ts: { type: Date, default: Date.now }, userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, text: String },
@@ -20,15 +21,16 @@ const pipelineSchema = new mongoose.Schema(
     company: { type: String, required: true },
     customer: { type: String, default: '' },
     email: { type: String, default: '' },
-    cat: { type: String, default: '' },
-    product: { type: String, default: '' },
-    // Subscription type - closed set (MNP / FNP / NEW), enforced by pipelineController's zod
-    // schemas rather than a Mongoose-level enum here, so a pre-existing deal saved under the old
-    // free-text scheme doesn't fail whole-document validation on an unrelated save (e.g. a TL
-    // approval) before it's next edited through the (now-enum-gated) update endpoint.
-    sr: { type: String, default: '' },
-    price: { type: Number, default: 0 },
-    qty: { type: Number, default: 1 },
+    contactNo: { type: String, default: '' },
+
+    // One or more {Category, Product, Subscription Type} blocks, each with one or more
+    // {price, qty} rows - see models/schemas/lineItem.js. Replaces the old flat
+    // cat/product/sr/price/qty fields (one deal used to mean exactly one line item).
+    lineItems: {
+      type: [lineItemBlockSchema],
+      default: () => [{ cat: '', product: '', sr: '', rows: [{ price: 0, qty: 1, mrc: 0 }], blockMrc: 0 }],
+    },
+    // Grand-total rollup across every block/row - always recomputed server-side, see utils/lineItems.js.
     mrc: { type: Number, default: 0 },
     annual: { type: Number, default: 0 },
 

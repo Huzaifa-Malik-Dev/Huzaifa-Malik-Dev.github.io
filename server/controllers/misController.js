@@ -142,7 +142,7 @@ async function buildRecords(agentIds, monthStr) {
       .sort({ startedDate: -1 })
       .limit(RECORD_CAP)
       .populate('agentId', 'name')
-      .select('dsrNo company customer product cat stage approval mrc agentId')
+      .select('dsrNo company customer lineItems stage approval mrc agentId')
       .lean(),
   ]);
 
@@ -152,8 +152,12 @@ async function buildRecords(agentIds, monthStr) {
     })),
     dsrTotal,
     dsrTruncated: dsrTotal > dsrDocs.length,
+    // A deal can carry several line items - this drill-down only has room for a one-line summary,
+    // so it shows the first block and how many more there are (the deal panel has the full detail).
     pipelineRecords: pipelineDocs.map((p) => ({
-      dsrNo: p.dsrNo, company: p.company, customer: p.customer, product: p.product, cat: p.cat,
+      dsrNo: p.dsrNo, company: p.company, customer: p.customer,
+      product: p.lineItems?.[0]?.product || '', cat: p.lineItems?.[0]?.cat || '',
+      extraLineItems: Math.max((p.lineItems?.length || 0) - 1, 0),
       stage: p.stage, approval: p.approval, mrc: p.mrc, agentName: p.agentId?.name,
     })),
     pipelineTotal,

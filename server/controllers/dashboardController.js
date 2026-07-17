@@ -96,4 +96,30 @@ async function getSummary(req, res, next) {
   }
 }
 
-module.exports = { getSummary };
+// Orders awaiting this user's cancellation decision. Lives on the Dashboard rather than in Back
+// Office because the approver is the Sales Head, who has no `backoffice` module access at all
+// (see MODULE_ACCESS_DEFAULT) and so can never browse the orders table - Dashboard is the one
+// surface they already have. Scoped to the order's own snapshotted salesHeadId (not a
+// managerChain walk), matching the check services/workflow.js makes on approve/reject; works
+// identically for Pipeline-backed and directly-created orders.
+async function getPendingCancellations(req, res, next) {
+  try {
+    const user = req.user;
+    const canApprove = user.role === 'admin' || user.role === 'sales_head';
+    if (!canApprove) return res.json({ data: [] });
+
+    const filter = user.role === 'admin' ? { cancellationRequested: true } : { cancellationRequested: true, salesHeadId: user._id };
+    const orders = await Order.find(filter)
+      .select('dsrNo orderNo customer mrc status direct cancellationReason cancellationRequestedAt cancellationRequestedBy agentId')
+      .populate('cancellationRequestedBy', 'name')
+      .populate('agentId', 'name')
+      .sort({ cancellationRequestedAt: 1 })
+      .lean();
+
+    res.json({ data: orders });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getSummary, getPendingCancellations };

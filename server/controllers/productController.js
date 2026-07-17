@@ -3,18 +3,30 @@ const Product = require('../models/Product');
 const { parsePagination, buildPageResponse } = require('../utils/pagination');
 const AppError = require('../utils/AppError');
 const { logActivity, diffFields, describeFields } = require('../utils/activityLog');
+const { CATEGORIES, SR_TYPES } = require('../utils/constants');
 
 const PRODUCT_FIELD_LABELS = { title: 'Title', cat: 'Category', active: 'Active' };
 
+function uniquePricingTypes(pricing) {
+  const types = pricing.map((p) => p.subscriptionType);
+  return new Set(types).size === types.length;
+}
+
+const pricingSchema = z
+  .array(z.object({ subscriptionType: z.enum(SR_TYPES), defaultPrice: z.number().min(0) }))
+  .refine(uniquePricingTypes, { message: 'Each subscription type can only have one price preset' });
+
 const createSchema = z.object({
   title: z.string().trim().min(1),
-  cat: z.string().trim().min(1),
+  cat: z.enum(CATEGORIES, { errorMap: () => ({ message: 'Category is required' }) }),
+  pricing: pricingSchema.optional().default([]),
   active: z.boolean().optional().default(true),
 });
 
 const updateSchema = z.object({
   title: z.string().trim().min(1).optional(),
-  cat: z.string().trim().min(1).optional(),
+  cat: z.enum(CATEGORIES).optional(),
+  pricing: pricingSchema.optional(),
   active: z.boolean().optional(),
 });
 
@@ -63,10 +75,14 @@ async function update(req, res, next) {
     if (!product) throw new AppError('Product not found', 404);
 
     const before = { title: product.title, cat: product.cat, active: product.active };
+    const pricingChanged = parsed.data.pricing !== undefined && JSON.stringify(product.pricing) !== JSON.stringify(parsed.data.pricing);
     Object.assign(product, parsed.data);
     await product.save();
 
     const changes = diffFields(before, product.toObject(), PRODUCT_FIELD_LABELS);
+    // pricing is an array of objects - diffFields' generic array.join() display would render it as
+    // unreadable "[object Object]" noise, so it gets its own plain marker instead of a value diff.
+    if (pricingChanged) changes.push('Pricing updated');
     if (changes.length) logActivity(req.user, `edited product "${product.title}": ${changes.join(', ')}`);
     res.json({ data: product });
   } catch (err) {

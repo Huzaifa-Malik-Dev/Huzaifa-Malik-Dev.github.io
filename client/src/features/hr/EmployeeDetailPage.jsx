@@ -4,13 +4,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Stack, TextInput, NumberInput, Select, Button, Divider, Title, Text, Group, FileButton,
   SimpleGrid, Paper, Loader, Center, ActionIcon, Tooltip, Avatar, UnstyledButton, Modal, Image,
-  SegmentedControl,
+  SegmentedControl, CopyButton,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '../../utils/toast';
-import { ArrowLeft, Upload, Pencil, Eye, Camera, Image as ImageIcon, FileText, Percent } from 'lucide-react';
-import { fetchEmployeeByEmployeeId, updateEmployee, uploadEmployeeDoc } from '../../api/hr';
+import { ArrowLeft, Upload, Pencil, Eye, Camera, Image as ImageIcon, FileText, Percent, KeyRound, Check, Copy } from 'lucide-react';
+import { fetchEmployeeByEmployeeId, updateEmployee, uploadEmployeeDoc, resetEmployeePassword } from '../../api/hr';
 import { useAuth } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { ROLE_LABELS } from '../../constants/nav';
 import { docHealth } from './docHealth';
 import { colorFor, initials } from '../../utils/avatar';
@@ -143,10 +144,16 @@ export default function EmployeeDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const confirm = useConfirm();
   const canEdit = user.editModules?.includes('hr');
   const editMode = searchParams.get('edit') === '1';
   // Viewing is always available; actually editing requires both hr edit access AND explicit edit mode.
   const editing = canEdit && editMode;
+  // Admin only - HR can edit an employee's profile but not take over their account. The server
+  // enforces the same rule (userController.resetPassword); this just hides the button.
+  const canResetPassword = user.role === 'admin';
+  const [resetResult, setResetResult] = useState(null);
+  const [resetting, setResetting] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['hr', 'employee', employeeId],
@@ -186,6 +193,28 @@ export default function EmployeeDetailPage() {
   }, [employee?._id]);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['hr'] });
+
+  // The generated password comes back exactly once and is never recoverable afterwards (the server
+  // only ever stores its hash), so it goes into a modal the admin has to dismiss deliberately -
+  // not a toast that could auto-dismiss before it's been read or copied.
+  const handleResetPassword = async () => {
+    const ok = await confirm({
+      title: `Reset ${employee.name}'s password?`,
+      message: `A new password will be generated for ${employee.name} (${employee.employeeId}) and shown to you once, to pass on to them. They will be signed out of every device immediately, and their current password will stop working.`,
+      confirmLabel: 'Yes, reset password',
+      color: 'red',
+    });
+    if (!ok) return;
+    setResetting(true);
+    try {
+      const res = await resetEmployeePassword(employee._id);
+      setResetResult(res.data);
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Could not reset password', message: err.response?.data?.error || 'Something went wrong' });
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const handleSubmit = async (values) => {
     try {
@@ -262,17 +291,24 @@ export default function EmployeeDetailPage() {
           </Group>
         }
         actions={
-          canEdit && (
-            editing ? (
-              <Button size="xs" variant="light" leftSection={<Eye size={14} />} onClick={() => setSearchParams({})}>
-                Back to view
+          <Group gap="xs">
+            {canResetPassword && (
+              <Button size="xs" variant="light" leftSection={<KeyRound size={14} />} loading={resetting} onClick={handleResetPassword}>
+                Reset Password
               </Button>
-            ) : (
-              <Button size="xs" variant="light" color="red" leftSection={<Pencil size={14} />} onClick={() => setSearchParams({ edit: '1' })}>
-                Edit
-              </Button>
-            )
-          )
+            )}
+            {canEdit && (
+              editing ? (
+                <Button size="xs" variant="light" leftSection={<Eye size={14} />} onClick={() => setSearchParams({})}>
+                  Back to view
+                </Button>
+              ) : (
+                <Button size="xs" variant="light" color="red" leftSection={<Pencil size={14} />} onClick={() => setSearchParams({ edit: '1' })}>
+                  Edit
+                </Button>
+              )
+            )}
+          </Group>
         }
       />
 
@@ -574,6 +610,50 @@ export default function EmployeeDetailPage() {
 
       <Modal opened={!!previewUrl} onClose={() => setPreviewUrl(null)} size="lg" centered title="Document Preview">
         {previewUrl && <Image src={previewUrl} fit="contain" mah="75vh" radius="sm" />}
+      </Modal>
+
+      {/* No onClose-by-overlay/escape: this password cannot be retrieved again once dismissed, so
+          closing it has to be a deliberate click on the button that says so. */}
+      <Modal
+        opened={!!resetResult}
+        onClose={() => setResetResult(null)}
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+        withCloseButton={false}
+        size="md"
+        centered
+        title="New password"
+      >
+        {resetResult && (
+          <Stack gap="sm">
+            <Text size="sm">
+              Give this to <b>{resetResult.name}</b> ({resetResult.employeeId}). It is shown once and cannot be
+              retrieved later — if you lose it, just reset again.
+            </Text>
+            <Paper withBorder p="sm" radius="md">
+              <Text size="xs" c="dimmed">Username</Text>
+              <Text size="sm" fw={600} mb="xs">{resetResult.username}</Text>
+              <Text size="xs" c="dimmed">Password</Text>
+              <Group gap="xs" wrap="nowrap">
+                <Text size="lg" fw={700} style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{resetResult.password}</Text>
+                <CopyButton value={resetResult.password}>
+                  {({ copied, copy }) => (
+                    <Tooltip label={copied ? 'Copied' : 'Copy password'}>
+                      <ActionIcon variant="light" color={copied ? 'green' : 'gray'} onClick={copy} aria-label="Copy password">
+                        {copied ? <Check size={16} /> : <Copy size={16} />}
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
+                </CopyButton>
+              </Group>
+            </Paper>
+            <Text size="xs" c="dimmed">
+              They have been signed out everywhere and must use this to sign in. Ask them to change it from their own
+              profile once they're back in.
+            </Text>
+            <Button onClick={() => setResetResult(null)} fullWidth>I've saved this password</Button>
+          </Stack>
+        )}
       </Modal>
     </Stack>
   );

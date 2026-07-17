@@ -116,7 +116,7 @@ async function gatherPipelineStats(user, periodParam, dateParam) {
     Pipeline.find({ ...scope, stage: { $nin: ['100% - Deal Won', '0% - Lost'] } })
       .sort({ createdAt: 1 })
       .limit(5)
-      .select('company customer product stage createdAt')
+      .select('company customer lineItems stage createdAt')
       .lean(),
   ]);
 
@@ -129,7 +129,9 @@ async function gatherPipelineStats(user, periodParam, dateParam) {
   const now = Date.now();
   const stuckDeals = openDeals.map((d) => ({
     name: d.company || d.customer || 'Unnamed deal',
-    product: d.product || 'n/a',
+    // A deal can bundle several line items - the report reads as prose, so list every product on
+    // it rather than silently reporting only the first.
+    product: (d.lineItems || []).map((b) => b.product).filter(Boolean).join(', ') || 'n/a',
     stage: d.stage,
     daysOpen: Math.floor((now - new Date(d.createdAt).getTime()) / 86400000),
   }));
@@ -146,9 +148,15 @@ async function gatherFinancialStats(user, periodParam, dateParam) {
 
   const [activatedAgg, byCategory, onHoldAgg] = await Promise.all([
     Order.aggregate([{ $match: activatedMatch }, { $group: { _id: null, count: { $sum: 1 }, mrc: { $sum: '$mrc' }, commission: { $sum: '$commission' } } }]),
+    // Category now lives per line item, so revenue is attributed by unwinding to the block level
+    // and summing each block's own subtotal - summing the order's total mrc per category would
+    // count an order that spans two categories twice. Orders are counted distinctly ($addToSet),
+    // so an order with two blocks in the same category still counts once.
     Order.aggregate([
       { $match: activatedMatch },
-      { $group: { _id: '$cat', count: { $sum: 1 }, mrc: { $sum: '$mrc' } } },
+      { $unwind: '$lineItems' },
+      { $group: { _id: '$lineItems.cat', orderIds: { $addToSet: '$_id' }, mrc: { $sum: '$lineItems.blockMrc' } } },
+      { $project: { count: { $size: '$orderIds' }, mrc: 1 } },
       { $sort: { mrc: -1 } },
       { $limit: 5 },
     ]),

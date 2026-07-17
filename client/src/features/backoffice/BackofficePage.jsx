@@ -1,28 +1,23 @@
 import { useMemo, useState } from 'react';
-import { Title, Group, Paper, Select, Modal, Stack, TextInput, Textarea, NumberInput, ActionIcon, SimpleGrid, Button, Tooltip, Indicator, Text, Alert } from '@mantine/core';
+import { Title, Group, Paper, Select, Modal, Stack, TextInput, Textarea, NumberInput, ActionIcon, SimpleGrid, Button, Tooltip, Indicator, Text, Alert, Divider } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '../../utils/toast';
-import { MessageCircle, Plus, Eye, Pencil, X, AlertTriangle, Undo2, Info } from 'lucide-react';
+import { MessageCircle, Plus, Eye, Pencil, X, AlertTriangle, Undo2, Info, Ban } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import ImportExportBar from '../../components/ImportExportBar';
 import Tag from '../../components/Tag';
 import PageToolbar from '../../components/PageToolbar';
+import LineItemsEditor, { toFormLineItems, toApiLineItems, emptyBlock } from '../../components/LineItemsEditor';
 import { usePagedList } from '../../hooks/usePagedList';
 import { useThreadUnreadCounts } from '../../hooks/useNotifications';
-import { fetchOrderList, updateOrderStatus, updateOrder, sendOrderBack, createDirectOrder, fetchAssignableEmployees, exportOrders, importOrders } from '../../api/orders';
+import { fetchOrderList, updateOrderStatus, updateOrderLinked, updateOrder, sendOrderBack, createDirectOrder, fetchAssignableEmployees, requestOrderCancellation, exportOrders, importOrders } from '../../api/orders';
 import { fetchProducts } from '../../api/products';
 import { markViewed } from '../../api/views';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { useChat } from '../../context/ChatContext';
-import { SR_TYPES } from '../../constants/pipeline';
-
-// 'In Line' = Etisalat has paid - the order closes and locks (see workflow.updateOrderStatus /
-// orderController.update, server-side): no more edits or status changes except to 'Cancelled'.
-// 'Not In Line' = payment is pending/doesn't match yet - a plain flag, no lock.
-const ORDER_STATUS = ['New', 'E& In-process', 'On Hold', 'Activated', 'Closed', 'Cancelled', 'In Line', 'Not In Line'];
-const ETISALAT_STATUS = ['Submitted', 'In Progress', 'Pending for delivery', 'Activated', 'Rejected', 'Closed'];
+import { ORDER_STATUS, LINKED_STATUS, ORDER_DONE_STATUSES, ETISALAT_STATUS } from '../../constants/orders';
 
 const STATUS_COLOR = {
   New: 'gray',
@@ -31,9 +26,9 @@ const STATUS_COLOR = {
   Activated: 'green',
   Closed: 'teal',
   Cancelled: 'red',
-  'In Line': 'green',
-  'Not In Line': 'orange',
 };
+
+const LINKED_COLOR = { Linked: 'green', 'Not Linked': 'orange' };
 
 function AED(n) {
   return `AED ${Number(n || 0).toLocaleString()}`;
@@ -61,13 +56,18 @@ export default function BackofficePage() {
   const [statusFilter, setStatusFilter] = useState(null);
   const [editRow, setEditRow] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [cancelRow, setCancelRow] = useState(null);
+  // Independent from/to ranges for the two dates an order carries - exported separately because
+  // "everything submitted in June" and "everything activated in June" are different questions.
+  const [exportRange, setExportRange] = useState({ subDateFrom: '', subDateTo: '', actDateFrom: '', actDateTo: '' });
   const canAddDirect = user.role === 'admin' || user.role === 'backoffice';
-  // A pending correction request means the agent/TL is about to rework this deal back in
-  // Pipeline - Back Office editing the order's own fields in the meantime would just create two
-  // conflicting versions of the same change. Locked for everyone, including admin: "send back to
-  // Pipeline" (the list row action) is the only sanctioned way forward from here, not a direct edit.
+  // A pending correction or cancellation request means someone else is mid-decision on this order -
+  // Back Office editing its fields in the meantime would just create two conflicting versions of
+  // the same change. Locked for everyone, including admin: sending it back to Pipeline (correction)
+  // or the Sales Head deciding (cancellation) is the only sanctioned way forward, not a direct edit.
   const correctionLocked = !!editRow?.correctionRequested;
-  const modalLocked = (editRow?.status === 'In Line' && !isAdmin) || correctionLocked;
+  const cancellationLocked = !!editRow?.cancellationRequested;
+  const modalLocked = (editRow?.linked === 'Linked' && !isAdmin) || correctionLocked || cancellationLocked;
 
   const list = usePagedList(['orders'], fetchOrderList, { filters: { status: statusFilter || undefined } });
 
@@ -84,8 +84,8 @@ export default function BackofficePage() {
 
   const createForm = useForm({
     initialValues: {
-      agentId: '', customer: '', contact: '', contactNo: '', email: '', sr: 'NEW',
-      cat: '', product: '', contract: '12 Months', qty: 1, price: '', remarks: '',
+      agentId: '', customer: '', contact: '', contactNo: '', email: '',
+      lineItems: [emptyBlock()], contract: '12 Months', remarks: '',
     },
     validate: {
       agentId: (v) => (v ? null : 'Select who this order is for'),
@@ -95,22 +95,18 @@ export default function BackofficePage() {
 
   const editForm = useForm({
     initialValues: {
-      subDate: '', contact: '', contactNo: '', email: '', pid: '', eOrderNo: '', sr: 'NEW',
-      cat: '', product: '', contract: '12 Months', qty: 1, price: '', eAcctMgr: '', actDate: '', commission: '', remarks: '', etisalatStatus: '',
+      subDate: '', contact: '', contactNo: '', email: '', pid: '', eOrderNo: '',
+      lineItems: [emptyBlock()], contract: '12 Months', eAcctMgr: '', actDate: '', commission: '', remarks: '', etisalatStatus: '',
     },
+  });
+
+  const cancelForm = useForm({
+    initialValues: { reason: '' },
+    validate: { reason: (v) => (v?.trim() ? null : 'A reason is required to request cancellation') },
   });
 
   const productsQuery = useQuery({ queryKey: ['products', 'options'], queryFn: () => fetchProducts({ limit: 200, active: true }) });
   const products = productsQuery.data?.data || [];
-  // Category is free text on the Order (same reasoning as Pipeline's cat) - an order saved under
-  // an older/removed category must still render instead of going blank, so the current value is
-  // always included alongside whatever's pickable live from the product catalog.
-  const categories = [...new Set(products.map((p) => p.cat))];
-  const createCategoryOptions = createForm.values.cat && !categories.includes(createForm.values.cat) ? [...categories, createForm.values.cat] : categories;
-  const editCategoryOptions = editForm.values.cat && !categories.includes(editForm.values.cat) ? [...categories, editForm.values.cat] : categories;
-  // Subscription Type is a closed set (SR_TYPES), but an order saved under the old free-text
-  // scheme (e.g. 'MIG') must still render instead of going blank - same pattern as Pipeline.
-  const srOptions = editForm.values.sr && !SR_TYPES.includes(editForm.values.sr) ? [...SR_TYPES, editForm.values.sr] : SR_TYPES;
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -119,16 +115,14 @@ export default function BackofficePage() {
 
   const handleStatusChange = async (row, status) => {
     const message =
-      status === 'In Line'
-        ? `Mark order ${row.dsrNo} (${row.customer}) as In Line? This closes the order — no further edits will be possible except cancelling it.`
-        : status === 'Cancelled' && row.status === 'In Line'
-        ? `Cancel order ${row.dsrNo} (${row.customer})? It was In Line — this does not currently reverse any accounting entries.`
+      status === 'Cancelled' && row.linked === 'Linked'
+        ? `Cancel order ${row.dsrNo} (${row.customer})? It is Linked — this does not currently reverse any accounting entries.`
         : `Set order ${row.dsrNo} (${row.customer}) status from "${row.status}" to "${status}"? The agent and Team Leader will be notified.`;
     const ok = await confirm({
       title: 'Change order status?',
       message,
       confirmLabel: `Yes, set to "${status}"`,
-      color: status === 'In Line' ? 'green' : status === 'Cancelled' ? 'red' : 'blue',
+      color: status === 'Cancelled' ? 'red' : 'blue',
     });
     if (!ok) return;
     try {
@@ -137,6 +131,44 @@ export default function BackofficePage() {
       refresh();
     } catch (err) {
       notifications.show({ color: 'red', title: 'Could not update', message: err.response?.data?.error || 'Something went wrong' });
+    }
+  };
+
+  // Linked is the post-completion reconciliation check against Etisalat's own records, only
+  // settable once the order is Activated/Closed. Marking it Linked closes the order for good:
+  // no further edits or status changes for anyone but an admin, except cancelling it.
+  const handleLinkedChange = async (row, linked) => {
+    const ok = await confirm({
+      title: linked === 'Linked' ? 'Mark this order as Linked?' : 'Mark this order as Not Linked?',
+      message:
+        linked === 'Linked'
+          ? `Order ${row.dsrNo} (${row.customer}) will be closed — no further edits or status changes will be possible except cancelling it.`
+          : `Order ${row.dsrNo} (${row.customer}) will be flagged as not yet matching Etisalat's records. It stays editable.`,
+      confirmLabel: `Yes, mark "${linked}"`,
+      color: linked === 'Linked' ? 'green' : 'orange',
+    });
+    if (!ok) return;
+    try {
+      await updateOrderLinked(row._id, linked);
+      notifications.show({ color: 'green', message: `${row.dsrNo} marked "${linked}"` });
+      refresh();
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Could not update', message: err.response?.data?.error || 'Something went wrong' });
+    }
+  };
+
+  // Cancelling an order needs the Sales Head's sign-off and a mandatory reason - the order freezes
+  // until they decide. Surfaced here mainly for direct orders (which have no Pipeline deal, so the
+  // agent/TL can't raise it from the deal panel), but works on any order.
+  const handleRequestCancellation = async (values) => {
+    try {
+      await requestOrderCancellation(cancelRow._id, values.reason);
+      notifications.show({ color: 'green', message: 'Cancellation requested — the Sales Head has been notified' });
+      setCancelRow(null);
+      cancelForm.reset();
+      refresh();
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Could not request cancellation', message: err.response?.data?.error || 'Something went wrong' });
     }
   };
 
@@ -162,16 +194,15 @@ export default function BackofficePage() {
     setEditRow(row);
     editForm.setValues({
       subDate: row.subDate || '', contact: row.contact || '', contactNo: row.contactNo || '', email: row.email || '', pid: row.pid || '',
-      eOrderNo: row.eOrderNo || '', sr: row.sr || 'NEW', cat: row.cat || '', product: row.product || '',
-      contract: row.contract || '12 Months', qty: row.qty || 1, price: row.price || '', eAcctMgr: row.eAcctMgr || '',
+      eOrderNo: row.eOrderNo || '', lineItems: toFormLineItems(row.lineItems),
+      contract: row.contract || '12 Months', eAcctMgr: row.eAcctMgr || '',
       actDate: row.actDate || '', commission: row.commission || '', remarks: row.remarks || '', etisalatStatus: row.etisalatStatus || '',
     });
   };
 
   const handleCreateDirect = async (values) => {
     try {
-      const payload = { ...values, price: values.price === '' ? 0 : values.price };
-      const res = await createDirectOrder(payload);
+      const res = await createDirectOrder({ ...values, lineItems: toApiLineItems(values.lineItems) });
       notifications.show({ color: 'green', message: `Order ${res.data.orderNo} added` });
       setCreateOpen(false);
       createForm.reset();
@@ -185,7 +216,7 @@ export default function BackofficePage() {
     try {
       const payload = {
         ...values,
-        price: values.price === '' ? 0 : values.price,
+        lineItems: toApiLineItems(values.lineItems),
         commission: values.commission === '' ? 0 : values.commission,
       };
       await updateOrder(editRow._id, payload);
@@ -243,9 +274,37 @@ export default function BackofficePage() {
         },
       },
       { accessorKey: 'customer', header: 'Customer' },
-      { accessorKey: 'product', header: 'Product' },
-      { accessorKey: 'qty', header: 'Qty' },
+      {
+        // An order can bundle several line items now - show the first, and how many more there
+        // are, rather than a wall of text. The full breakdown is one click away in the edit modal.
+        id: 'product',
+        header: 'Product',
+        enableSorting: false,
+        cell: (info) => {
+          const blocks = info.row.original.lineItems || [];
+          if (!blocks.length) return <Text size="sm" c="dimmed">-</Text>;
+          const [first, ...rest] = blocks;
+          return (
+            <div>
+              <Text size="sm">{first.product || '-'}</Text>
+              <Text size="xs" c="dimmed">
+                {first.cat || '-'}
+                {rest.length ? ` +${rest.length} more` : ''}
+              </Text>
+            </div>
+          );
+        },
+      },
+      {
+        id: 'qty',
+        header: 'Qty',
+        enableSorting: false,
+        cell: (info) =>
+          (info.row.original.lineItems || []).reduce((sum, b) => sum + (b.rows || []).reduce((s, r) => s + (Number(r.qty) || 0), 0), 0),
+      },
       { accessorKey: 'mrc', header: 'MRC', cell: (info) => AED(info.getValue()) },
+      { accessorKey: 'submissionMonth', header: 'Sub. Month', enableSorting: false, cell: (info) => info.getValue() || <Text size="sm" c="dimmed">-</Text> },
+      { accessorKey: 'activationMonth', header: 'Act. Month', enableSorting: false, cell: (info) => info.getValue() || <Text size="sm" c="dimmed">-</Text> },
       { accessorKey: 'agentId', header: 'Agent', enableSorting: false, cell: (info) => info.getValue()?.name || '-' },
       { accessorKey: 'eOrderNo', header: 'e& Order No.' },
       {
@@ -259,7 +318,7 @@ export default function BackofficePage() {
           <Group gap={4} wrap="nowrap">
             <span>Status</span>
             <Tooltip
-              label="Our internal fulfillment status — separate from Etisalat Status. 'In Line' means Etisalat has paid: the order closes and locks (only Cancel remains). 'Not In Line' means payment is pending or doesn't match yet."
+              label="Our internal fulfillment status — separate from Etisalat Status (e&'s own) and from Linked (the post-completion reconciliation check)."
               multiline
               w={280}
             >
@@ -270,20 +329,34 @@ export default function BackofficePage() {
         cell: (info) => {
           const row = info.row.original;
           if (!canChangeStatus) return <Tag color={STATUS_COLOR[row.status] || 'gray'}>{row.status}</Tag>;
-          // Same "wait for it to be sent back to Pipeline first" lock as the edit modal - this
-          // inline Select is a separate control from that modal, so it needs its own guard rather
-          // than inheriting modalLocked (which only applies once the modal is actually open).
+          // These inline Selects are separate controls from the edit modal, so they need their own
+          // guards rather than inheriting modalLocked (which only applies once the modal is open).
+          // Labelled "Correction Pending"/"Cancellation Pending" rather than "On Hold" - On Hold is
+          // a real, selectable status of its own (and an Etisalat status), so reusing it here for a
+          // lock state would read as though the order had actually been moved to that status.
           if (row.correctionRequested) {
             const waitingOn = correctionWaitingOn(row);
             const requester = row.correctionRequestedBy?.name || 'someone';
             const who = waitingOn === 'agent' ? `the agent (${requester})` : waitingOn === 'tl' ? `the Team Leader (${requester})` : requester;
             return (
-              <Tooltip label={`Was "${row.status}" — waiting on ${who} to fix the deal before this order can move again`} multiline w={260}>
-                <Tag color="orange">On Hold</Tag>
+              <Tooltip label={`Still "${row.status}" — waiting on ${who} to fix the deal before this order can move again`} multiline w={260}>
+                <Tag color="orange">Correction Pending</Tag>
               </Tooltip>
             );
           }
-          const locked = row.status === 'In Line' && !isAdmin;
+          if (row.cancellationRequested) {
+            const requester = row.cancellationRequestedBy?.name || 'someone';
+            return (
+              <Tooltip
+                label={`Still "${row.status}" — ${requester} asked to cancel this order${row.cancellationReason ? ` ("${row.cancellationReason}")` : ''}. Frozen until the Sales Head approves or rejects it.`}
+                multiline
+                w={280}
+              >
+                <Tag color="red">Cancellation Pending</Tag>
+              </Tooltip>
+            );
+          }
+          const locked = row.linked === 'Linked' && !isAdmin;
           if (locked) {
             return (
               <Group gap={4} wrap="nowrap">
@@ -314,6 +387,47 @@ export default function BackofficePage() {
           );
         },
       },
+      {
+        accessorKey: 'linked',
+        header: () => (
+          <Group gap={4} wrap="nowrap">
+            <span>Linked</span>
+            <Tooltip
+              label="Whether this order matches Etisalat's own records. Only settable once the order is Activated or Closed. Marking it Linked closes the order — no further edits or status changes except cancelling it."
+              multiline
+              w={280}
+            >
+              <Info size={13} style={{ opacity: 0.6, cursor: 'help' }} />
+            </Tooltip>
+          </Group>
+        ),
+        cell: (info) => {
+          const row = info.row.original;
+          if (!canChangeStatus || row.correctionRequested || row.cancellationRequested) {
+            return row.linked ? <Tag color={LINKED_COLOR[row.linked]}>{row.linked}</Tag> : <Text size="sm" c="dimmed">-</Text>;
+          }
+          if (row.linked === 'Linked' && !isAdmin) return <Tag color={LINKED_COLOR.Linked}>Linked</Tag>;
+          // "Post-completion" is the literal rule - the server rejects marking anything else Linked.
+          if (!ORDER_DONE_STATUSES.includes(row.status)) {
+            return (
+              <Tooltip label={`Available once the order is ${ORDER_DONE_STATUSES.join(' or ')}`}>
+                <Text size="sm" c="dimmed">-</Text>
+              </Tooltip>
+            );
+          }
+          return (
+            <Select
+              data={LINKED_STATUS}
+              value={row.linked || null}
+              placeholder="Not set"
+              onChange={(v) => v && handleLinkedChange(row, v)}
+              size="xs"
+              w={130}
+              aria-label={`Set Linked status for order ${row.orderNo || row._id}`}
+            />
+          );
+        },
+      },
       { accessorKey: 'commission', header: 'Commission', cell: (info) => AED(info.getValue()) },
       {
         id: 'action',
@@ -328,8 +442,8 @@ export default function BackofficePage() {
                 </ActionIcon>
               </Tooltip>
               {canChangeStatus && (
-                row.status === 'In Line' && !isAdmin ? (
-                  <Tooltip label="In Line orders are closed — cancel it if a correction is needed">
+                row.linked === 'Linked' && !isAdmin ? (
+                  <Tooltip label="Linked orders are closed — cancel it if a correction is needed">
                     <ActionIcon variant="filled" size="lg" radius="md" disabled aria-label="Edit disabled">
                       <Pencil size={18} />
                     </ActionIcon>
@@ -346,6 +460,15 @@ export default function BackofficePage() {
                 <Tooltip label="Send this deal back to Pipeline so it can be corrected">
                   <ActionIcon color="orange" variant="filled" size="lg" radius="md" onClick={(e) => { e.stopPropagation(); handleSendBack(row); }} aria-label="Send back to Pipeline">
                     <Undo2 size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+              {/* A direct order has no Pipeline deal, so its agent/TL can't raise a cancellation
+                  from the deal panel - this is their only route to the Sales Head sign-off. */}
+              {canEdit && row.direct && !row.cancellationRequested && !row.correctionRequested && row.status !== 'Cancelled' && (
+                <Tooltip label="Request cancellation (needs Sales Head approval)">
+                  <ActionIcon color="red" variant="light" size="lg" radius="md" onClick={(e) => { e.stopPropagation(); setCancelRow(row); }} aria-label="Request cancellation">
+                    <Ban size={18} />
                   </ActionIcon>
                 </Tooltip>
               )}
@@ -388,6 +511,15 @@ export default function BackofficePage() {
               filenamePrefix="orders"
               exportFn={exportOrders}
               importFn={importOrders}
+              // Blank dates are dropped rather than sent as '' — the server validates the format
+              // strictly and would reject an empty string as malformed.
+              exportParams={{
+                status: statusFilter || undefined,
+                subDateFrom: exportRange.subDateFrom || undefined,
+                subDateTo: exportRange.subDateTo || undefined,
+                actDateFrom: exportRange.actDateFrom || undefined,
+                actDateTo: exportRange.actDateTo || undefined,
+              }}
               onImported={refresh}
             />
             {canAddDirect && (
@@ -398,6 +530,52 @@ export default function BackofficePage() {
           </Group>
         }
       />
+
+      {/* Export-only date ranges — "everything submitted in June" and "everything activated in
+          June" are different questions, so the two dates filter independently and can combine. */}
+      <Paper withBorder p="sm" radius="md">
+        <Group align="flex-end" gap="sm" wrap="wrap">
+          <Text size="xs" c="dimmed" w="100%">Export date range (optional — leave blank to export everything)</Text>
+          <TextInput
+            type="date"
+            label="Submitted from"
+            size="xs"
+            value={exportRange.subDateFrom}
+            onChange={(e) => setExportRange((r) => ({ ...r, subDateFrom: e.currentTarget.value }))}
+          />
+          <TextInput
+            type="date"
+            label="Submitted to"
+            size="xs"
+            value={exportRange.subDateTo}
+            onChange={(e) => setExportRange((r) => ({ ...r, subDateTo: e.currentTarget.value }))}
+          />
+          <Divider orientation="vertical" />
+          <TextInput
+            type="date"
+            label="Activated from"
+            size="xs"
+            value={exportRange.actDateFrom}
+            onChange={(e) => setExportRange((r) => ({ ...r, actDateFrom: e.currentTarget.value }))}
+          />
+          <TextInput
+            type="date"
+            label="Activated to"
+            size="xs"
+            value={exportRange.actDateTo}
+            onChange={(e) => setExportRange((r) => ({ ...r, actDateTo: e.currentTarget.value }))}
+          />
+          {(exportRange.subDateFrom || exportRange.subDateTo || exportRange.actDateFrom || exportRange.actDateTo) && (
+            <Button
+              variant="subtle"
+              size="xs"
+              onClick={() => setExportRange({ subDateFrom: '', subDateTo: '', actDateFrom: '', actDateTo: '' })}
+            >
+              Clear
+            </Button>
+          )}
+        </Group>
+      </Paper>
 
       <Paper withBorder p="md" radius="md">
         <DataTable
@@ -419,9 +597,9 @@ export default function BackofficePage() {
       <Modal opened={!!editRow} onClose={() => setEditRow(null)} title={`Order — ${editRow?.dsrNo || ''}`} size="lg">
         <form onSubmit={editForm.onSubmit(handleEdit)}>
           <Stack gap="sm">
-            {editRow?.status === 'In Line' && !isAdmin && (
+            {editRow?.linked === 'Linked' && !isAdmin && (
               <Alert color="gray" variant="light">
-                This order is In Line and closed — it can no longer be edited. Cancel it if a correction is needed.
+                This order is Linked and closed — it can no longer be edited. Cancel it if a correction is needed.
               </Alert>
             )}
             {correctionLocked && (
@@ -430,13 +608,21 @@ export default function BackofficePage() {
                   const waitingOn = correctionWaitingOn(editRow);
                   const requester = editRow?.correctionRequestedBy?.name || 'someone';
                   const who = waitingOn === 'agent' ? `the agent (${requester})` : waitingOn === 'tl' ? `the Team Leader (${requester})` : requester;
-                  return `On hold, waiting on ${who} — this order can't be edited until it's sent back to Pipeline for correction.`;
+                  return `Correction pending, waiting on ${who} — this order can't be edited until it's sent back to Pipeline for correction.`;
                 })()}
+              </Alert>
+            )}
+            {cancellationLocked && (
+              <Alert color="red" variant="light" icon={<Ban size={16} />}>
+                {editRow?.cancellationRequestedBy?.name || 'Someone'} asked to cancel this order
+                {editRow?.cancellationReason ? ` — "${editRow.cancellationReason}"` : ''}. It's frozen until the Sales Head approves or rejects the request.
               </Alert>
             )}
             <SimpleGrid cols={2}>
               <TextInput type="date" label="Submission Date" disabled={!canEdit || modalLocked} {...editForm.getInputProps('subDate')} />
               <TextInput type="date" label="Activation Date" disabled={!canEdit || modalLocked} {...editForm.getInputProps('actDate')} />
+              <TextInput label="Submission Month" value={editRow?.submissionMonth || '-'} readOnly disabled description="Derived from Submission Date" />
+              <TextInput label="Activation Month" value={editRow?.activationMonth || '-'} readOnly disabled description="Derived from Activation Date" />
               <TextInput label="Contact Person" disabled={!canEdit || modalLocked} {...editForm.getInputProps('contact')} />
               <TextInput label="Contact No." disabled={!canEdit || modalLocked} {...editForm.getInputProps('contactNo')} />
               <TextInput label="Email" disabled={!canEdit || modalLocked} {...editForm.getInputProps('email')} />
@@ -456,22 +642,17 @@ export default function BackofficePage() {
                 disabled={!canEdit || modalLocked}
                 {...editForm.getInputProps('etisalatStatus')}
               />
-              <Select label="Subscription Type" data={srOptions} disabled={!canEdit || modalLocked} {...editForm.getInputProps('sr')} />
-              <Select label="Category" data={editCategoryOptions} disabled={!canEdit || modalLocked} {...editForm.getInputProps('cat')} />
-              <TextInput label="Product" disabled={!canEdit || modalLocked} {...editForm.getInputProps('product')} />
               <TextInput label="Contract" disabled={!canEdit || modalLocked} {...editForm.getInputProps('contract')} />
               <TextInput label="e& Account Manager" disabled={!canEdit || modalLocked} {...editForm.getInputProps('eAcctMgr')} />
-              <NumberInput label="Quantity" min={1} disabled={!canEdit || modalLocked} {...editForm.getInputProps('qty')} />
-              <NumberInput label="Price (AED)" min={0} disabled={!canEdit || modalLocked} {...editForm.getInputProps('price')} />
-              <TextInput
-                label="MRC (AED)"
-                value={AED((Number(editForm.values.price) || 0) * (Number(editForm.values.qty) || 0))}
-                readOnly
-                disabled
-                description="Price × Quantity, calculated automatically"
-              />
               <NumberInput label="Commission (AED)" min={0} disabled={!canEdit || modalLocked} {...editForm.getInputProps('commission')} />
             </SimpleGrid>
+            <Divider label="Line Items" labelPosition="left" mt="xs" />
+            <LineItemsEditor
+              form={editForm}
+              products={products}
+              savedLineItems={editRow?.lineItems}
+              disabled={!canEdit || modalLocked}
+            />
             <Textarea label="Remarks" disabled={!canEdit || modalLocked} {...editForm.getInputProps('remarks')} />
             {canEdit && !modalLocked && <Button type="submit" mt="sm">Save changes</Button>}
           </Stack>
@@ -497,22 +678,28 @@ export default function BackofficePage() {
               <TextInput label="Contact Person" {...createForm.getInputProps('contact')} />
               <TextInput label="Contact No." {...createForm.getInputProps('contactNo')} />
               <TextInput label="Email" {...createForm.getInputProps('email')} />
-              <Select label="Subscription Type" data={SR_TYPES} {...createForm.getInputProps('sr')} />
-              <Select label="Category" data={createCategoryOptions} {...createForm.getInputProps('cat')} />
-              <TextInput label="Product" {...createForm.getInputProps('product')} />
               <TextInput label="Contract" {...createForm.getInputProps('contract')} />
-              <NumberInput label="Quantity" min={1} {...createForm.getInputProps('qty')} />
-              <NumberInput label="Price (AED)" min={0} {...createForm.getInputProps('price')} />
-              <TextInput
-                label="MRC (AED)"
-                value={AED((Number(createForm.values.price) || 0) * (Number(createForm.values.qty) || 0))}
-                readOnly
-                disabled
-                description="Price × Quantity, calculated automatically"
-              />
             </SimpleGrid>
+            <Divider label="Line Items" labelPosition="left" mt="xs" />
+            <LineItemsEditor form={createForm} products={products} />
             <Textarea label="Remarks" {...createForm.getInputProps('remarks')} />
             <Button type="submit" mt="sm">Add Order</Button>
+          </Stack>
+        </form>
+      </Modal>
+
+      <Modal opened={!!cancelRow} onClose={() => { setCancelRow(null); cancelForm.reset(); }} title="Request order cancellation" size="md">
+        <form onSubmit={cancelForm.onSubmit(handleRequestCancellation)}>
+          <Stack gap="sm">
+            <Text size="sm">
+              This asks the Sales Head to cancel order <b>{cancelRow?.orderNo || cancelRow?.dsrNo}</b> ({cancelRow?.customer}).
+              The order freezes — no edits or status changes — until they approve or reject the request.
+            </Text>
+            <Textarea label="Why should this order be cancelled?" withAsterisk {...cancelForm.getInputProps('reason')} />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => { setCancelRow(null); cancelForm.reset(); }}>Cancel</Button>
+              <Button type="submit" color="red">Yes, request cancellation</Button>
+            </Group>
           </Stack>
         </form>
       </Modal>

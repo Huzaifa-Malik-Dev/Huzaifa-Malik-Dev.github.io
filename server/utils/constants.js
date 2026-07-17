@@ -26,7 +26,10 @@ const PERMISSION_TREE = [
   {
     key: 'pipeline',
     label: 'Sales Pipeline',
-    children: [{ key: 'pipeline.approve', label: 'Approve / Reject Deals (Team Leader)' }],
+    children: [
+      { key: 'pipeline.approve', label: 'Approve / Reject Deals (Team Leader)' },
+      { key: 'pipeline.approveCancellation', label: 'Approve / Reject Order Cancellation (Sales Head)' },
+    ],
   },
   {
     key: 'backoffice',
@@ -144,6 +147,10 @@ const SENSITIVE_ACTION_GRANTS = {
   'payroll.ledger': ['admin', 'accountant'],
   'payroll.commissionTiers': ['admin', 'hr'],
   'pipeline.approve': ['admin', 'sales_head', 'teams_head', 'team_leader'],
+  // Narrower than pipeline.approve's full chain — cancellation sign-off is scoped specifically to
+  // the order's own snapshotted salesHeadId (checked per-request in workflow.js), not the whole
+  // manager chain, so only Sales Head (and admin) can even reach the endpoint at all.
+  'pipeline.approveCancellation': ['admin', 'sales_head'],
   'backoffice.statusChange': ['admin', 'backoffice'],
   // The actual "is this really their manager" check happens per-request in services/leave.js
   // (isAuthorizedApprover walks the employee's whole managerChain) - this just gates who can
@@ -184,33 +191,47 @@ const NOT_CONNECTED_STATUSES = ['No answer', 'Voicemail', 'Number not in use', '
 // approval workflow, see APPROVAL_STATUS below).
 const PIPE_STAGES = ['10%- Prospect', '30% - Value Prop', '50% - Negotiation', '70% - Finalizing', '90% - Closing', '100% - Deal Won', '0% - Lost'];
 
-// Subscription Type on a Pipeline deal - a closed set, not free text (business rule).
-const SR_TYPES = ['MNP', 'FNP', 'NEW'];
+// Subscription Type on a Pipeline deal - a closed set, not free text (business rule). Now scoped
+// per line-item block (see models/schemas/lineItem.js) rather than once per whole deal.
+const SR_TYPES = ['NEW', 'MIG', 'MNP', 'FNP', 'ADD ON', 'P2P'];
+
+// Product/line-item category - a closed set matching the business's own reference sheet. Not a
+// separate collection (see models/Product.js) - just four fixed values, same treatment as
+// PIPE_STAGES/ORDER_STATUS below.
+const CATEGORIES = ['DIGITAL', 'FIXED', 'GSM', 'WIRELESS'];
 
 // The optional TL sign-off workflow - independent of the deal's sales-progress stage. An agent
 // can ask their TL to review/approve a deal at any point; reaching 100% also opens an order
 // regardless of approval state. See services/workflow.js.
 const APPROVAL_STATUS = ['none', 'pending_tl', 'approved', 'rejected'];
 
-// Fields a Pipeline deal must have filled in (and saved) before Team Leader approval can be
-// requested. `director` is deliberately excluded - it's the one optional field. Shared by
+// Flat fields a Pipeline deal must have filled in (and saved) before Team Leader approval can be
+// requested. Line-item completeness (category/product/subscription type/price/qty per block/row)
+// is no longer flat - it's checked separately by workflow.missingPipelineFields against
+// pipeline.lineItems. `director` is deliberately excluded - it's the one optional field. Shared by
 // pipelineController's updateSchema (client can't save the deal without these) and
 // services/workflow.escalateToTL (client can't request approval without these) so the two
 // enforcement points can never drift apart. The client keeps its own mirror of this list purely
 // for instant UI feedback (disabled button + inline field errors) - this is the actual source of truth.
 const PIPELINE_REQUIRED_FOR_APPROVAL = {
-  cat: 'Category', product: 'Product', sr: 'Subscription Type', price: 'Unit Price',
-  qty: 'Quantity', email: 'Customer Email', expectedCloseDate: 'Expected Close Date', remarks: 'Remarks',
+  email: 'Customer Email', expectedCloseDate: 'Expected Close Date', remarks: 'Remarks',
 };
 
-// 'In Line' = Etisalat has paid — the order closes and locks (see workflow.updateOrderStatus /
-// orderController.update): no more field edits or status changes except to 'Cancelled'.
-// 'Not In Line' = payment is pending/doesn't match yet — a plain flag, no lock, edits freely.
-const ORDER_STATUS = ['New', 'E& In-process', 'On Hold', 'Activated', 'Closed', 'Cancelled', 'In Line', 'Not In Line'];
+// The successor to 'In Line'/'Not In Line' (removed from ORDER_STATUS below) - see Order.linked
+// and workflow.setOrderLinked. Split into its own field because it's a reconciliation check made
+// only once an order is done, not a fulfillment-lifecycle status.
+const LINKED_STATUS = ['Linked', 'Not Linked'];
+
+// Statuses at which `linked` becomes settable - "post-completion", per the business rule.
+const ORDER_DONE_STATUSES = ['Activated', 'Closed'];
+
+const ORDER_STATUS = ['New', 'E& In-process', 'On Hold', 'Activated', 'Closed', 'Cancelled'];
 
 // e&'s own processing status for the order - independent of ORDER_STATUS (this app's internal
-// fulfillment workflow). Assigned by Back Office once they have visibility into e&'s side.
-const ETISALAT_STATUS = ['Submitted', 'In Progress', 'Pending for delivery', 'Activated', 'Rejected', 'Closed'];
+// fulfillment workflow) and independent of the correction-request lock (which the Back Office UI
+// separately labels "Correction Pending", never "On Hold", to avoid confusion with this real,
+// selectable status value). Assigned by Back Office once they have visibility into e&'s side.
+const ETISALAT_STATUS = ['Submitted', 'In Progress', 'On Hold', 'Pending for delivery', 'Activated', 'Rejected', 'Closed'];
 
 // Modules that support bulk Import/Export of records (from the real Excel trackers). Kept as its
 // own axis from view/edit - a user can be able to see and edit a module's records one-by-one in
@@ -255,9 +276,12 @@ module.exports = {
   NOT_CONNECTED_STATUSES,
   PIPE_STAGES,
   SR_TYPES,
+  CATEGORIES,
   APPROVAL_STATUS,
   PIPELINE_REQUIRED_FOR_APPROVAL,
   ORDER_STATUS,
+  LINKED_STATUS,
+  ORDER_DONE_STATUSES,
   ETISALAT_STATUS,
   IMPORT_EXPORT_MODULES,
   IMPORT_EXPORT_DEFAULT,

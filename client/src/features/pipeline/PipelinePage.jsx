@@ -61,20 +61,33 @@ export default function PipelinePage() {
       {
         // Category folded into the Product column (as dimmed subtext) instead of its own
         // column — the two are almost always read together, and one fewer column leaves more
-        // horizontal room for the rest on narrower laptop screens.
+        // horizontal room for the rest on narrower laptop screens. A deal can carry several line
+        // items now, so show the first and count the rest; the full breakdown is in the deal panel.
         id: 'product',
         header: 'Product',
+        enableSorting: false,
         cell: (info) => {
-          const row = info.row.original;
+          const blocks = info.row.original.lineItems || [];
+          if (!blocks.length) return <Text size="sm">—</Text>;
+          const [first, ...rest] = blocks;
           return (
             <div>
-              <Text size="sm">{row.product || '—'}</Text>
-              {row.cat && <Text size="xs" c="dimmed">{row.cat}</Text>}
+              <Text size="sm">{first.product || '—'}</Text>
+              <Text size="xs" c="dimmed">
+                {first.cat || '—'}
+                {rest.length ? ` +${rest.length} more` : ''}
+              </Text>
             </div>
           );
         },
       },
-      { accessorKey: 'qty', header: 'Qty' },
+      {
+        id: 'qty',
+        header: 'Qty',
+        enableSorting: false,
+        cell: (info) =>
+          (info.row.original.lineItems || []).reduce((sum, b) => sum + (b.rows || []).reduce((s, r) => s + (Number(r.qty) || 0), 0), 0),
+      },
       // Annual is just MRC × 12 — showing both is redundant column space; Annual still shows in
       // the deal detail modal for anyone who wants it broken out.
       { accessorKey: 'mrc', header: 'MRC', cell: (info) => AED(info.getValue()) },

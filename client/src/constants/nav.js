@@ -4,15 +4,24 @@ import { LayoutDashboard, Phone, Workflow, ClipboardCheck, BarChart3, Users, Wal
 // `children` (where present) are nested tabs/functionality within that module — each has its
 // own None/View/Edit permission (see Admin > Permissions), same key space as the parent module,
 // just checked via a more specific dotted key (e.g. user.editModules.includes('hr.addEmployee')).
+// `badgeKey` (where present) makes the item show a live count of records you haven't opened yet —
+// exactly the rows that page highlights as new, so the badge and the highlighting always agree
+// (see server/controllers/viewController.js unreadCounts). Its value is the record-view module
+// name, which is what the count endpoint keys by — hence 'backoffice' badges on module 'orders'.
+// A record never counts for whoever created it. Adding a badge to another module means adding it
+// to VIEW_TRACKED_MODULES (services/recordViews.js) and the count endpoint too.
 export const NAV_ITEMS = [
   { key: 'dash', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-  { key: 'dsr', label: 'DSR — Agent', icon: Phone, path: '/dsr' },
+  { key: 'dsr', label: 'DSR — Agent', icon: Phone, path: '/dsr', badgeKey: 'dsr' },
   {
-    key: 'pipeline', label: 'Sales Pipeline', icon: Workflow, path: '/pipeline',
-    children: [{ key: 'pipeline.approve', label: 'Approve / Reject Deals (Team Leader)' }],
+    key: 'pipeline', label: 'Sales Pipeline', icon: Workflow, path: '/pipeline', badgeKey: 'pipeline',
+    children: [
+      { key: 'pipeline.approve', label: 'Approve / Reject Deals (Team Leader)' },
+      { key: 'pipeline.approveCancellation', label: 'Approve / Reject Order Cancellation (Sales Head)' },
+    ],
   },
   {
-    key: 'backoffice', label: 'Back Office / Orders', icon: ClipboardCheck, path: '/backoffice',
+    key: 'backoffice', label: 'Back Office / Orders', icon: ClipboardCheck, path: '/backoffice', badgeKey: 'orders',
     children: [{ key: 'backoffice.statusChange', label: 'Change Order Status' }],
   },
   { key: 'mis', label: 'MIS & Targets', icon: BarChart3, path: '/mis' },

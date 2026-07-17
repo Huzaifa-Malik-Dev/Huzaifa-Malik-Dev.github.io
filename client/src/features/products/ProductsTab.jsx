@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Group, Modal, Stack, TextInput, ActionIcon, Tooltip } from '@mantine/core';
+import { Button, Group, Modal, Stack, TextInput, Select, ActionIcon, Tooltip } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQueryClient } from '@tanstack/react-query';
 import { notifications } from '../../utils/toast';
@@ -9,6 +9,7 @@ import Tag from '../../components/Tag';
 import { usePagedList } from '../../hooks/usePagedList';
 import { fetchProducts, createProduct, updateProduct, deleteProduct } from '../../api/products';
 import { useConfirm } from '../../context/ConfirmContext';
+import { CATEGORIES } from '../../constants/pipeline';
 
 export default function ProductsTab({ canEdit }) {
   const queryClient = useQueryClient();
@@ -171,7 +172,7 @@ export default function ProductsTab({ canEdit }) {
         <form onSubmit={form.onSubmit(handleCreate)}>
           <Stack gap="sm">
             <TextInput label="Title" required {...form.getInputProps('title')} />
-            <TextInput label="Category" placeholder="e.g. Fixed, Mobile, Digital" required {...form.getInputProps('cat')} />
+            <Select label="Category" data={CATEGORIES} required {...form.getInputProps('cat')} />
             <Button type="submit" mt="sm">Save Product</Button>
           </Stack>
         </form>
@@ -181,7 +182,14 @@ export default function ProductsTab({ canEdit }) {
         <form onSubmit={editForm.onSubmit(handleEdit)}>
           <Stack gap="sm">
             <TextInput label="Title" required {...editForm.getInputProps('title')} />
-            <TextInput label="Category" required {...editForm.getInputProps('cat')} />
+            {/* A product saved under a category that's since left the fixed CATEGORIES set must
+                still render rather than going blank - same stale-value pattern used for line items. */}
+            <Select
+              label="Category"
+              data={editRow?.cat && !CATEGORIES.includes(editRow.cat) ? [...CATEGORIES, editRow.cat] : CATEGORIES}
+              required
+              {...editForm.getInputProps('cat')}
+            />
             <Button type="submit" mt="sm">Save changes</Button>
           </Stack>
         </form>

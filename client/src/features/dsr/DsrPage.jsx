@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import {
   Title, Group, Button, Paper, Select, Modal, Stack, TextInput, Textarea, ActionIcon, Tooltip,
-  Autocomplete, SimpleGrid, Divider, Indicator, CopyButton, Text,
+  Autocomplete, SimpleGrid, Divider, Indicator, CopyButton, Text, Switch,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -67,14 +67,25 @@ const STATUS_COLOR = {
 // Shared layout for the Log Call / Edit DSR modals — grouped into short, labelled sections with
 // field icons instead of one long column of lookalike inputs, per UX research on reducing
 // perceived form complexity (group by intent, icon each field, keep sections short).
-function DsrFormFields({ form, companySlot, agentSlot, disabled = false }) {
+// `statusDisabled` is separate from `disabled` on purpose: once a DSR is converted, its call
+// status freezes but its factual fields (contact no, building, email...) stay correctable right up
+// until Back Office — see dsrController.assertStatusChangeAllowed vs isSentToBackOffice.
+function DsrFormFields({ form, companySlot, agentSlot, disabled = false, statusDisabled = false, statusDescription }) {
   return (
     <Stack gap="md">
       <div>
         <Divider label="When & Outcome" labelPosition="left" mb="sm" />
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <FlexDateInput label="Date" required readOnly={disabled} value={form.values.date} onChange={(v) => form.setFieldValue('date', v)} />
-          <Select label="Status" data={CALL_STATUS_GROUPS} required searchable disabled={disabled} {...form.getInputProps('status')} />
+          <Select
+            label="Status"
+            data={CALL_STATUS_GROUPS}
+            required
+            searchable
+            description={statusDescription}
+            disabled={disabled || statusDisabled}
+            {...form.getInputProps('status')}
+          />
         </SimpleGrid>
         {agentSlot && <div style={{ marginTop: 'var(--mantine-spacing-sm)' }}>{agentSlot}</div>}
       </div>
@@ -123,7 +134,10 @@ export default function DsrPage() {
   const [debouncedCompanyQuery] = useDebouncedValue(companyQuery, 250);
   const keepOpenRef = useRef(false);
 
-  const list = usePagedList(['dsr'], fetchDsrList);
+  // Once a DSR is converted its deal lives on in Pipeline, so it drops out of the calling list by
+  // default and only live calls show. The record is never deleted - this toggle brings it back.
+  const [showConverted, setShowConverted] = useState(false);
+  const list = usePagedList(['dsr'], fetchDsrList, { filters: { includeConverted: showConverted || undefined } });
 
   const visibleDsrNos = useMemo(() => (list.data || []).map((r) => r.dsrNo), [list.data]);
   const { data: unreadData } = useThreadUnreadCounts(visibleDsrNos);
@@ -207,6 +221,10 @@ export default function DsrPage() {
   // Locked only once the deal is actually sent to Back Office, not the moment it enters the
   // Pipeline - see dsrController.isSentToBackOffice for why convertedToPipeline alone is too early.
   const canEditFields = !!editRow && (editIsOwner || editIsAdmin) && (editIsAdmin || !editRow.sentToBackOffice);
+  // The call status is the one field that freezes earlier than the rest - at conversion, not at
+  // Back Office (see dsrController.assertStatusChangeAllowed). Admin keeps the same override the
+  // sentToBackOffice lock above gives them.
+  const statusFrozen = !!editRow?.convertedToPipeline && !editIsAdmin;
 
   const handleEdit = async (values) => {
     try {
@@ -264,7 +282,9 @@ export default function DsrPage() {
     });
     if (!ok) return;
     try {
-      await convertToPipeline({ dsrId: dsr._id, price: 100, qty: 1 });
+      // Seeded with one empty line-item block - the agent fills in the actual
+      // Category/Product/Subscription Type and price/qty on the deal panel afterward.
+      await convertToPipeline({ dsrId: dsr._id, lineItems: [{ cat: '', product: '', sr: '', rows: [{ price: 0, qty: 1 }] }] });
       notifications.show({ color: 'green', message: `${dsr.dsrNo} moved to pipeline` });
       queryClient.invalidateQueries({ queryKey: ['dsr'] });
       list.refetch();
@@ -335,6 +355,16 @@ export default function DsrPage() {
           const row = info.row.original;
           if (!canEdit || String(row.agentId?._id) !== String(user.id) || row.sentToBackOffice) {
             return <Tag color={STATUS_COLOR[row.status] || 'gray'}>{row.status}</Tag>;
+          }
+          // The call's outcome is settled once it's converted — the deal's progress lives on the
+          // Pipeline deal from there (see dsrController.assertStatusChangeAllowed, which rejects
+          // this server-side too).
+          if (row.convertedToPipeline) {
+            return (
+              <Tooltip label="This deal is in the Sales Pipeline — its progress is tracked there now, not on the call record" multiline w={260}>
+                <Tag color={STATUS_COLOR[row.status] || 'gray'}>{row.status}</Tag>
+              </Tooltip>
+            );
           }
           return (
             <Select
@@ -408,11 +438,19 @@ export default function DsrPage() {
         title={<Title order={1} size="h3">DSR — Agent Calling List</Title>}
         actions={
           <Group gap="sm">
+            <Switch
+              label="Show converted"
+              checked={showConverted}
+              onChange={(e) => setShowConverted(e.currentTarget.checked)}
+            />
             <ImportExportBar
               moduleKey="dsr"
               filenamePrefix="dsr"
               exportFn={exportDsr}
               importFn={importDsr}
+              // Keeps the sheet matching what's on screen - without this the export would always
+              // include converted DSRs the list is currently hiding.
+              exportParams={{ includeConverted: showConverted || undefined }}
               onImported={() => { queryClient.invalidateQueries({ queryKey: ['dsr'] }); list.refetch(); }}
             />
             {canEdit && (
@@ -493,6 +531,8 @@ export default function DsrPage() {
           <DsrFormFields
             form={editForm}
             disabled={!canEditFields}
+            statusDisabled={statusFrozen}
+            statusDescription={statusFrozen ? 'Locked — this deal is in the Sales Pipeline, where its progress is tracked now' : undefined}
             companySlot={<TextInput label="Company" required leftSection={<Building2 size={16} />} disabled={!canEditFields} {...editForm.getInputProps('company')} />}
           />
           {canEditFields && <Button type="submit" mt="md" fullWidth>Save changes</Button>}

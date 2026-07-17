@@ -1,23 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Stack, Text, Paper, Group, Button, SimpleGrid, Select, NumberInput, TextInput,
+  Stack, Text, Paper, Group, Button, SimpleGrid, Select, TextInput,
   Textarea, Alert, Loader, Center, Divider, Modal, Tooltip,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '../../utils/toast';
-import { Check, X, Info, MessageCircle, Send, AlertTriangle } from 'lucide-react';
-import { fetchPipelineOne, updatePipeline, escalateToTL, approvePipeline, rejectPipeline, requestPipelineCorrection } from '../../api/pipeline';
+import { Check, X, Send, AlertTriangle, Ban } from 'lucide-react';
+import { fetchPipelineOne, updatePipeline, escalateToTL, approvePipeline, rejectPipeline, requestPipelineCorrection, requestPipelineCancellation } from '../../api/pipeline';
 import { fetchProducts } from '../../api/products';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../context/ConfirmContext';
-import { useChat } from '../../context/ChatContext';
-import { PIPE_STAGES, SR_TYPES, STAGE_COLOR, APPROVAL_INFO } from '../../constants/pipeline';
-import Tag from '../../components/Tag';
-
-function AED(n) {
-  return `AED ${Number(n || 0).toLocaleString()}`;
-}
+import { PIPE_STAGES, APPROVAL_INFO } from '../../constants/pipeline';
+import LineItemsEditor, { toFormLineItems, toApiLineItems, validateLineItems, emptyBlock } from '../../components/LineItemsEditor';
 
 // Confirm-step copy for each action - the whole point is the user should never be surprised
 // by what a click does, matching the reference prototype's descriptive button labels.
@@ -46,22 +41,45 @@ const CORRECTION_INFO = {
   confirmLabel: 'Yes, flag for Back Office',
 };
 
+// Unlike a correction (which loops the deal back for a fix), cancellation ends the order outright -
+// so it needs the Sales Head's sign-off and a mandatory reason, and the order freezes until they
+// decide. See server/services/workflow.js requestOrderCancellation.
+const CANCELLATION_INFO = {
+  title: 'Request order cancellation?',
+  body: 'This asks the Sales Head to cancel this order. The order freezes — no edits or status changes — until they approve or reject the request. A reason is required.',
+  color: 'red',
+  confirmLabel: 'Yes, request cancellation',
+};
+
 // Every field must be filled in and saved before a Team Leader approval can be requested -
-// `director` is deliberately excluded (optional, per business rule). Keyed the same way both here
-// (for the tooltip copy) and in editForm's `validate` (for the Save Changes button) so the two
-// checks can never drift apart.
+// `director` is deliberately excluded (optional, per business rule). Mirrors the server's own
+// PIPELINE_REQUIRED_FOR_APPROVAL + line-item completeness check (services/workflow.js
+// missingPipelineFields) so the disabled button and the server's 400 always agree.
 const REQUIRED_FIELD_LABELS = {
-  cat: 'Category', product: 'Product', sr: 'Subscription Type', price: 'Unit Price',
-  qty: 'Quantity', email: 'Customer Email', expectedCloseDate: 'Expected Close Date', remarks: 'Remarks',
+  email: 'Customer Email', expectedCloseDate: 'Expected Close Date', remarks: 'Remarks',
 };
 
 function missingRequiredFields(deal) {
-  return Object.keys(REQUIRED_FIELD_LABELS).filter((key) => {
-    const value = deal[key];
-    if (key === 'price') return !(Number(value) > 0);
-    if (key === 'qty') return !(Number(value) >= 1);
-    return !value || !String(value).trim();
+  const missing = Object.keys(REQUIRED_FIELD_LABELS)
+    .filter((key) => !deal[key] || !String(deal[key]).trim())
+    .map((key) => REQUIRED_FIELD_LABELS[key]);
+
+  const lineItems = deal.lineItems || [];
+  if (!lineItems.length) {
+    missing.push('at least one line item');
+    return missing;
+  }
+  lineItems.forEach((block, i) => {
+    const label = `Line Item ${i + 1}`;
+    if (!block.cat) missing.push(`${label}: Category`);
+    if (!block.product) missing.push(`${label}: Product`);
+    if (!block.sr) missing.push(`${label}: Subscription Type`);
+    (block.rows || []).forEach((row, j) => {
+      if (!(Number(row.price) > 0)) missing.push(`${label}, Row ${j + 1}: Unit Price`);
+      if (!(Number(row.qty) >= 1)) missing.push(`${label}, Row ${j + 1}: Quantity`);
+    });
   });
+  return missing;
 }
 
 // Content-only panel (no page chrome) - rendered inside a Modal by PipelinePage so approving,
@@ -70,48 +88,44 @@ export default function PipelineDealPanel({ dealId }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const confirm = useConfirm();
-  const openChat = useChat();
   const canEdit = user.editModules?.includes('pipeline');
-  const [confirmAction, setConfirmAction] = useState(null); // 'approve' | 'reject' | 'escalateSalesHead' | null
+  const [confirmAction, setConfirmAction] = useState(null); // 'approve' | 'reject' | 'requestCorrection' | 'requestCancellation' | null
 
   const { data, isLoading } = useQuery({ queryKey: ['pipeline', 'one', dealId], queryFn: () => fetchPipelineOne(dealId) });
   const deal = data?.data;
 
   const productsQuery = useQuery({ queryKey: ['products', 'options'], queryFn: () => fetchProducts({ limit: 200, active: true }) });
   const products = productsQuery.data?.data || [];
-  // A deal's cat/product are free text, not a reference into the Product catalog, so a deal saved
-  // under a category/product that's since been renamed or deactivated has a value the live
-  // catalog no longer contains. Mantine's Select only displays a value present in its `data` —
-  // without this, that deal's dropdown renders blank even though the field is correctly populated,
-  // which reads as data loss rather than "not in the current catalog". Always include the deal's
-  // current value so what's actually saved is always visible, on top of whatever's pickable live.
-  const categories = [...new Set(products.map((p) => p.cat))];
-  if (deal?.cat && !categories.includes(deal.cat)) categories.push(deal.cat);
 
-  const reasonForm = useForm({ initialValues: { reason: '' } });
+  // Reason is mandatory only for a cancellation request (the server hard-rejects a blank one) -
+  // optional for reject/correction, matching their own server-side rules.
+  const reasonForm = useForm({
+    initialValues: { reason: '' },
+    validate: {
+      reason: (v) => (confirmAction === 'requestCancellation' && !v?.trim() ? 'A reason is required to request cancellation' : null),
+    },
+  });
 
   const editForm = useForm({
     initialValues: {
-      cat: '', product: '', sr: '', price: '', qty: 1, stage: '10%- Prospect',
+      lineItems: [emptyBlock()], stage: '10%- Prospect',
       email: '', expectedCloseDate: '', director: '', remarks: '',
     },
-    validate: {
-      cat: (v) => (v && v.trim() ? null : 'Category is required'),
-      product: (v) => (v && v.trim() ? null : 'Product is required'),
-      sr: (v) => (v && v.trim() ? null : 'Subscription Type is required'),
-      price: (v) => (v !== '' && Number(v) > 0 ? null : 'Price is required'),
-      qty: (v) => (v && Number(v) >= 1 ? null : 'Quantity is required'),
-      email: (v) => (v && v.trim() ? null : 'Customer Email is required'),
-      expectedCloseDate: (v) => (v && v.trim() ? null : 'Expected Close Date is required'),
-      remarks: (v) => (v && v.trim() ? null : 'Remarks are required'),
+    // A whole-form validator rather than the per-field record style used elsewhere: lineItems is
+    // variable-length, so its per-index validators can't be statically declared.
+    validate: (values) => ({
+      ...validateLineItems(values.lineItems),
+      email: values.email?.trim() ? null : 'Customer Email is required',
+      expectedCloseDate: values.expectedCloseDate?.trim() ? null : 'Expected Close Date is required',
+      remarks: values.remarks?.trim() ? null : 'Remarks are required',
       // director is intentionally not validated - it's the one optional field.
-    },
+    }),
   });
 
   useEffect(() => {
     if (deal) {
       editForm.setValues({
-        cat: deal.cat, product: deal.product, sr: deal.sr || '', price: deal.price || '', qty: deal.qty, stage: deal.stage,
+        lineItems: toFormLineItems(deal.lineItems), stage: deal.stage,
         email: deal.email || '', expectedCloseDate: deal.expectedCloseDate || '',
         director: deal.director || '', remarks: deal.remarks,
       });
@@ -148,9 +162,7 @@ export default function PipelineDealPanel({ dealId }) {
   // requested once every required field is actually filled in AND saved.
   const missingFields = missingRequiredFields(deal);
   const canRequestApproval = missingFields.length === 0;
-  const missingFieldsTooltip = canRequestApproval
-    ? ''
-    : `Save these required fields first: ${missingFields.map((k) => REQUIRED_FIELD_LABELS[k]).join(', ')}`;
+  const missingFieldsTooltip = canRequestApproval ? '' : `Save these required fields first: ${missingFields.join(', ')}`;
 
   const handleSaveDeal = async (values) => {
     if (values.stage === '100% - Deal Won' && deal.stage !== '100% - Deal Won') {
@@ -163,7 +175,7 @@ export default function PipelineDealPanel({ dealId }) {
       if (!ok) return;
     }
     try {
-      await updatePipeline(deal._id, { ...values, price: values.price === '' ? 0 : values.price });
+      await updatePipeline(deal._id, { ...values, lineItems: toApiLineItems(values.lineItems) });
       notifications.show({ color: 'green', message: 'Deal updated' });
       refresh();
     } catch (err) {
@@ -200,6 +212,9 @@ export default function PipelineDealPanel({ dealId }) {
       } else if (confirmAction === 'requestCorrection') {
         await requestPipelineCorrection(deal._id, values.reason);
         notifications.show({ color: 'green', message: 'Back Office has been notified' });
+      } else if (confirmAction === 'requestCancellation') {
+        await requestPipelineCancellation(deal._id, values.reason);
+        notifications.show({ color: 'green', message: 'Cancellation requested — the Sales Head has been notified' });
       }
       setConfirmAction(null);
       reasonForm.reset();
@@ -209,33 +224,23 @@ export default function PipelineDealPanel({ dealId }) {
     }
   };
 
-  const productOptions = products.filter((p) => !editForm.values.cat || p.cat === editForm.values.cat).map((p) => p.title);
-  if (deal.product && !productOptions.includes(deal.product)) productOptions.push(deal.product);
   // 90% - Closing is system-set only (Team Leader approval sends a deal there automatically) -
   // hidden from manual selection, except when the deal is already sitting at it (same
-  // stale-value-still-must-render pattern as categories/productOptions above).
+  // stale-value-still-must-render pattern LineItemsEditor uses for category/product/sr).
   const stageOptions = PIPE_STAGES.filter((s) => s !== '90% - Closing');
   if (deal.stage === '90% - Closing') stageOptions.push('90% - Closing');
-  // Subscription Type is a closed set now, but a deal saved under the old free-text scheme
-  // (e.g. 'MIG', 'B-ON') must still render instead of going blank.
-  const srOptions = deal.sr && !SR_TYPES.includes(deal.sr) ? [...SR_TYPES, deal.sr] : SR_TYPES;
-  const info = confirmAction === 'requestCorrection' ? CORRECTION_INFO : confirmAction ? ACTION_INFO[confirmAction] : null;
+  // An Activated or Linked order has already gone live with Etisalat - it's done, not a mistake to
+  // unwind through the correction loop (mirrors the server's own guard in
+  // workflow.requestOrderCorrection). Cancellation is still allowed, via the Sales Head.
+  const orderIsLive = !!deal.orderCorrection && (deal.orderCorrection.status === 'Activated' || deal.orderCorrection.linked === 'Linked');
+  const info =
+    confirmAction === 'requestCorrection' ? CORRECTION_INFO
+    : confirmAction === 'requestCancellation' ? CANCELLATION_INFO
+    : confirmAction ? ACTION_INFO[confirmAction]
+    : null;
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-start">
-        <Alert icon={<Info size={16} />} color="blue" variant="light" flex={1}>
-          Ref <b>{deal.dsrNo}</b> — this reference number carries through to Back Office when the deal is won and never changes.
-        </Alert>
-        <Button variant="light" leftSection={<MessageCircle size={16} />} onClick={() => openChat(deal.dsrNo)}>
-          Chat
-        </Button>
-      </Group>
-
-      <Group>
-        <Tag size="lg" color={STAGE_COLOR[deal.stage]}>{deal.stage}</Tag>
-      </Group>
-
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
         <Paper withBorder p="md" radius="md">
           <Divider label="Opportunity" labelPosition="left" mb="sm" />
@@ -265,23 +270,14 @@ export default function PipelineDealPanel({ dealId }) {
                 disabled={!canEditFields}
                 {...editForm.getInputProps('stage')}
               />
-              <Select label="Category" withAsterisk data={categories} disabled={!canEditFields} {...editForm.getInputProps('cat')} />
-              <Select label="Product" withAsterisk data={productOptions} disabled={!canEditFields} {...editForm.getInputProps('product')} />
-              <Select label="Subscription Type" withAsterisk data={srOptions} disabled={!canEditFields} {...editForm.getInputProps('sr')} />
-              <Group grow>
-                <NumberInput label="Unit Price (MRC)" description="Price per unit — MRC below is this × Quantity" withAsterisk min={0} disabled={!canEditFields} {...editForm.getInputProps('price')} />
-                <NumberInput label="Quantity" withAsterisk min={1} disabled={!canEditFields} {...editForm.getInputProps('qty')} />
-              </Group>
-              <Group grow>
-                <div>
-                  <Text size="xs" c="dimmed">MRC / month</Text>
-                  <Text size="sm" fw={600}>{AED(deal.mrc)}</Text>
-                </div>
-                <div>
-                  <Text size="xs" c="dimmed">Annual</Text>
-                  <Text size="sm" fw={600}>{AED(deal.annual)}</Text>
-                </div>
-              </Group>
+              <Divider label="Line Items" labelPosition="left" mt="xs" />
+              <LineItemsEditor
+                form={editForm}
+                products={products}
+                savedLineItems={deal.lineItems}
+                disabled={!canEditFields}
+              />
+              <Divider mt="xs" />
               <TextInput label="Customer Email" withAsterisk disabled={!canEditFields} {...editForm.getInputProps('email')} />
               <Group grow align="flex-start">
                 <Tooltip label="Automatically set to the date this deal was converted from a DSR — cannot be changed" withArrow>
@@ -335,7 +331,12 @@ export default function PipelineDealPanel({ dealId }) {
                 </>
               )}
               {deal.approval === 'approved' && (
-                deal.orderCorrection?.requested ? (
+                deal.orderCancellation?.requested ? (
+                  <Alert color="red" variant="light" icon={<Ban size={16} />}>
+                    Cancellation requested by <b>{deal.orderCancellation.requestedBy}</b> on {new Date(deal.orderCancellation.requestedAt).toLocaleString()}
+                    {deal.orderCancellation.reason ? <> — "{deal.orderCancellation.reason}"</> : null}. The order is frozen until the Sales Head approves or rejects it.
+                  </Alert>
+                ) : deal.orderCorrection?.requested ? (
                   <Alert color="orange" variant="light" icon={<AlertTriangle size={16} />}>
                     Correction requested by <b>{deal.orderCorrection.requestedBy}</b> on {new Date(deal.orderCorrection.requestedAt).toLocaleString()}
                     {deal.orderCorrection.note ? <> — "{deal.orderCorrection.note}"</> : null}. Waiting on Back Office to send it back to Pipeline.
@@ -343,13 +344,26 @@ export default function PipelineDealPanel({ dealId }) {
                 ) : (
                   <Stack gap={4}>
                     <Text size="sm" c="dimmed">Already approved and sent to Back Office — nothing more to do here.</Text>
-                    {deal.orderCorrection && !['Activated', 'In Line'].includes(deal.orderCorrection.status) && (
-                      <Button variant="filled" color="orange" leftSection={<AlertTriangle size={16} />} onClick={() => setConfirmAction('requestCorrection')}>
-                        Request Correction
+                    {orderIsLive ? (
+                      <Text size="xs" c="dimmed">
+                        Order is {deal.orderCorrection.linked === 'Linked' ? 'Linked' : deal.orderCorrection.status} — already live, no further corrections can be requested.
+                      </Text>
+                    ) : (
+                      deal.orderCorrection && (
+                        <Button variant="filled" color="orange" leftSection={<AlertTriangle size={16} />} onClick={() => setConfirmAction('requestCorrection')}>
+                          Request Correction
+                        </Button>
+                      )
+                    )}
+                    {/* Cancellation stays available even on a live/Linked order - unlike a correction,
+                        it's the one route out of a locked order, and the Sales Head has to sign it off. */}
+                    {deal.orderCorrection && deal.orderCorrection.status !== 'Cancelled' && (
+                      <Button variant="light" color="red" leftSection={<Ban size={16} />} onClick={() => setConfirmAction('requestCancellation')}>
+                        Request Cancellation
                       </Button>
                     )}
-                    {deal.orderCorrection && ['Activated', 'In Line'].includes(deal.orderCorrection.status) && (
-                      <Text size="xs" c="dimmed">Order is {deal.orderCorrection.status} — already live, no further corrections can be requested.</Text>
+                    {deal.orderCancellation?.rejectionReason && (
+                      <Text size="xs" c="dimmed">Last cancellation request was rejected — "{deal.orderCancellation.rejectionReason}"</Text>
                     )}
                     {deal.orderCorrection?.count > 0 && (
                       <Text size="xs" c="dimmed">Sent back for correction {deal.orderCorrection.count} time(s) before.</Text>
@@ -382,6 +396,9 @@ export default function PipelineDealPanel({ dealId }) {
             )}
             {confirmAction === 'requestCorrection' && (
               <Textarea label="What needs fixing? (optional, but helps Back Office)" {...reasonForm.getInputProps('reason')} />
+            )}
+            {confirmAction === 'requestCancellation' && (
+              <Textarea label="Why should this order be cancelled?" withAsterisk {...reasonForm.getInputProps('reason')} />
             )}
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setConfirmAction(null)}>Cancel</Button>

@@ -165,7 +165,12 @@ export default function AgentPerformancePage() {
                     <Table.Td>{p.company}</Table.Td>
                     <Table.Td>
                       <Text size="sm">{p.product || '—'}</Text>
-                      {p.cat && <Text size="xs" c="dimmed">{p.cat}</Text>}
+                      {(p.cat || p.extraLineItems > 0) && (
+                        <Text size="xs" c="dimmed">
+                          {p.cat}
+                          {p.extraLineItems > 0 ? ` +${p.extraLineItems} more` : ''}
+                        </Text>
+                      )}
                     </Table.Td>
                     {isManager && <Table.Td>{p.agentName || '—'}</Table.Td>}
                     <Table.Td>{AED(p.mrc)}</Table.Td>

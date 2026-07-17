@@ -10,7 +10,7 @@ const { sendXlsx, parseXlsxBuffer, cell, resolveAgentFromRow } = require('../uti
 const { regexOr } = require('../utils/search');
 const AppError = require('../utils/AppError');
 const { logActivity, diffFields } = require('../utils/activityLog');
-const { attachIsNew } = require('../services/recordViews');
+const { attachIsNew, markCreatedByMe, markManyViewed } = require('../services/recordViews');
 
 const DSR_FIELD_LABELS = { date: 'Date', company: 'Company', building: 'Building', contactNo: 'Contact No', email: 'Email', customer: 'Customer', status: 'Status', remarks: 'Remarks' };
 
@@ -18,13 +18,34 @@ function connectedFor(status) {
   return NOT_CONNECTED_STATUSES.includes(status) ? 'NO' : 'YES';
 }
 
-// A DSR stays editable through its whole life in the Sales Pipeline - `convertedToPipeline` flips
-// the instant it enters the pipeline (10%-Prospect), which is too early to lock the original call
-// record. The real cutoff is once the deal is actually sent to Back Office - an Order exists for
-// it (see services/workflow.js ensureOrderForPipeline, fired by TL approval or reaching 100%).
+// A DSR's FACTUAL fields (company, contact no, building, email, remarks) stay editable through the
+// deal's whole life in the Sales Pipeline - `convertedToPipeline` flips the instant it enters the
+// pipeline (10%-Prospect), which is too early to stop someone fixing a typo'd contact number. The
+// real cutoff for those is once the deal is actually sent to Back Office - an Order exists for it
+// (see services/workflow.js ensureOrderForPipeline, fired by TL approval or reaching 100%).
+//
+// `status` is the exception - see assertStatusChangeAllowed below.
 async function isSentToBackOffice(dsr) {
   if (!dsr.convertedToPipeline) return false;
   return Order.exists({ dsrNo: dsr.dsrNo });
+}
+
+// Unlike the factual fields above, `status` is the call's OUTCOME, and it's load-bearing: it gates
+// conversion to Pipeline (workflow.convertToPipeline requires 'Lead Generated') and it feeds MIS's
+// Interested count (misController). Once the DSR has been converted, that outcome is settled - the
+// deal's fate is Pipeline's to track from there via stage/approval (a dead deal is '0% - Lost', not
+// a rewritten call record). Letting the status move afterward silently shifts reported numbers for
+// a call that already concluded, so it's frozen at conversion rather than at Back Office.
+//
+// Admin can still override, matching the isSentToBackOffice exemption alongside it - an admin
+// fixing a genuinely mis-set status (e.g. a DSR converted by mistake) is exactly the case that
+// needs an escape hatch, and every such edit is activity-logged.
+function assertStatusChangeAllowed(dsr, actor) {
+  if (actor.role === 'admin' || !dsr.convertedToPipeline) return;
+  throw new AppError(
+    'This DSR is already in the Sales Pipeline — its call status can no longer be changed. The deal\'s progress is tracked on the Pipeline deal itself.',
+    400
+  );
 }
 
 // At least 7 digits after stripping formatting - loose enough for local/international UAE
@@ -101,6 +122,10 @@ async function list(req, res, next) {
     const filter = { ...scopeFilter(req.user) };
 
     if (req.query.status) filter.status = req.query.status;
+    // Once a DSR is converted, the deal lives on in Pipeline and the call record has served its
+    // purpose - hide it from the agent's working list by default so only live calls show. The
+    // record is never deleted: `includeConverted=true` brings them back into view.
+    if (req.query.includeConverted !== 'true') filter.convertedToPipeline = { $ne: true };
     // agentId query param only narrows within what scopeFilter already allows — it must never
     // widen access, so it's applied as an $and clause on top of the scope, not an override.
     if (req.query.agentId) filter.$and = [...(filter.$and || []), { agentId: req.query.agentId }];
@@ -166,6 +191,7 @@ async function create(req, res, next) {
       salesHeadId: chain[2] || null,
       history: [{ userId: req.user._id, text: `DSR created · status set to ${body.status}` }],
     });
+    markCreatedByMe(req.user._id, 'dsr', dsr._id);
 
     if (chain[0]) await notify(chain[0], `New DSR ${dsrNo} by ${agent.name} — ${body.company} (${body.status})`, { refType: 'dsr', refId: dsr._id });
 
@@ -189,6 +215,8 @@ async function updateStatus(req, res, next) {
     if (req.user.role !== 'admin' && (await isSentToBackOffice(dsr))) {
       throw new AppError('This deal has been sent to Back Office — the DSR record can no longer be edited', 400);
     }
+    // This endpoint exists only to change the status, so a frozen status blocks it outright.
+    if (parsed.data.status !== dsr.status) assertStatusChangeAllowed(dsr, req.user);
 
     const before = { status: dsr.status, remarks: dsr.remarks };
     dsr.status = parsed.data.status;
@@ -217,6 +245,12 @@ async function update(req, res, next) {
     if (!allowedToEdit) throw new AppError('You cannot edit this DSR', 403);
     if (req.user.role !== 'admin' && (await isSentToBackOffice(dsr))) {
       throw new AppError('This deal has been sent to Back Office — the DSR record can no longer be edited', 400);
+    }
+    // Only an actual CHANGE is blocked, not the field's presence - the edit form submits every
+    // field on every save, including an untouched status, so rejecting on presence alone would
+    // break editing a converted DSR's contact number (which is still allowed, by design).
+    if (parsed.data.status !== undefined && parsed.data.status !== dsr.status) {
+      assertStatusChangeAllowed(dsr, req.user);
     }
 
     const fields = parsed.data;
@@ -297,6 +331,10 @@ async function exportDsr(req, res, next) {
   try {
     const filter = { ...scopeFilter(req.user) };
     if (req.query.status) filter.status = req.query.status;
+    // Mirrors list()'s default so the sheet matches what's on screen - this endpoint already
+    // honours the status filter, and a Show-converted toggle that the export ignored would hand
+    // back a different set of rows than the one the user was looking at when they clicked Export.
+    if (req.query.includeConverted !== 'true') filter.convertedToPipeline = { $ne: true };
     const rows = await Dsr.find(filter).sort({ createdAt: -1 }).populate('agentId', 'name email username').lean();
     sendXlsx(res, `dsr-export-${Date.now()}.xlsx`, rows, EXPORT_COLUMNS, 'DSR');
   } catch (err) {
@@ -381,6 +419,7 @@ async function importDsr(req, res, next) {
     const errors = [];
     let created = 0;
     let skipped = 0;
+    const createdIds = []; // marked viewed for the importer in one bulk write at the end
     const tlNotifyCounts = new Map(); // tlId -> count, one summary notification per TL instead of one per row
 
     for (let i = 0; i < rawRows.length; i += 1) {
@@ -429,7 +468,7 @@ async function importDsr(req, res, next) {
         const dsrNo = 'DSR-' + String(seq).padStart(5, '0');
         const chain = agent.managerChain || [];
 
-        await Dsr.create({
+        const imported = await Dsr.create({
           dsrNo,
           ...body,
           connected: connectedFor(body.status),
@@ -439,12 +478,16 @@ async function importDsr(req, res, next) {
           salesHeadId: chain[2] || null,
           history: [{ userId: req.user._id, text: `DSR imported from spreadsheet · status set to ${body.status}` }],
         });
+        createdIds.push(imported._id);
         created += 1;
         if (chain[0]) tlNotifyCounts.set(String(chain[0]), (tlNotifyCounts.get(String(chain[0])) || 0) + 1);
       } catch (rowErr) {
         errors.push({ row: rowNum, message: rowErr.message || 'Unexpected error' });
       }
     }
+
+    // The importer created these, so they must not come back highlighted as new to them.
+    await markManyViewed(req.user._id, 'dsr', createdIds);
 
     // One summary per TL, not one per imported row - a 50-row import shouldn't flood a TL's
     // notification panel.
@@ -461,4 +504,4 @@ async function importDsr(req, res, next) {
   }
 }
 
-module.exports = { list, create, updateStatus, update, getOne, exportDsr, importDsr, autocomplete, loggableEmployees };
+module.exports = { list, create, updateStatus, update, getOne, exportDsr, importDsr, autocomplete, loggableEmployees, scopeFilter };

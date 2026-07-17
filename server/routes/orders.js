@@ -2,7 +2,7 @@ const express = require('express');
 const requireAuth = require('../middlewares/auth');
 const { requireModule, requireImportExport, requireAction } = require('../middlewares/rbac');
 const uploadExcel = require('../middlewares/uploadExcel');
-const { list, updateStatus, sendBack, update, createDirect, assignableEmployees, exportOrders, importOrders } = require('../controllers/orderController');
+const { list, updateStatus, updateLinked, sendBack, update, createDirect, assignableEmployees, exportOrders, importOrders } = require('../controllers/orderController');
 
 const router = express.Router();
 router.use(requireAuth, requireModule('backoffice'));
@@ -13,6 +13,8 @@ router.get('/assignable-employees', assignableEmployees);
 router.get('/', list);
 router.post('/', requireModule('backoffice', { edit: true }), createDirect);
 router.patch('/:id/status', requireModule('backoffice', { edit: true }), requireAction('backoffice.statusChange'), updateStatus);
+// Linked carries a lock once set, same as status - hence its own route rather than riding PATCH /:id.
+router.patch('/:id/linked', requireModule('backoffice', { edit: true }), requireAction('backoffice.statusChange'), updateLinked);
 router.post('/:id/send-back', requireModule('backoffice', { edit: true }), requireAction('backoffice.statusChange'), sendBack);
 router.patch('/:id', requireModule('backoffice', { edit: true }), update);
 

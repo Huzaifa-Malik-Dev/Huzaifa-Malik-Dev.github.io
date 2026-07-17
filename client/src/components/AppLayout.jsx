@@ -7,6 +7,7 @@ import { NAV_ITEMS, ROLE_LABELS } from '../constants/nav';
 import NotificationBell from './NotificationBell';
 import ProfileModal from './ProfileModal';
 import { useNotificationToasts } from '../hooks/useNotificationToasts';
+import { useUnreadCounts } from '../hooks/useUnreadCounts';
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
@@ -20,6 +21,11 @@ export default function AppLayout() {
   useNotificationToasts();
 
   const visibleNav = NAV_ITEMS.filter((item) => user.modules.includes(item.key));
+
+  // One request covers every badged nav item - the render loop below just looks each item's
+  // `badgeKey` up in this map (see constants/nav.js).
+  const { data: unread } = useUnreadCounts(!!user);
+  const badgeCounts = unread?.data || {};
 
   return (
     <AppShell
@@ -78,16 +84,27 @@ export default function AppLayout() {
       <ProfileModal opened={profileOpened} onClose={closeProfile} />
 
       <AppShell.Navbar p="sm">
-        {visibleNav.map((item) => (
-          <NavLink
-            key={item.key}
-            label={item.label}
-            leftSection={<item.icon size={18} />}
-            active={location.pathname === item.path || location.pathname.startsWith(item.path + '/')}
-            onClick={() => navigate(item.path)}
-            variant="filled"
-          />
-        ))}
+        {visibleNav.map((item) => {
+          const count = item.badgeKey ? badgeCounts[item.badgeKey] : undefined;
+          return (
+            <NavLink
+              key={item.key}
+              label={item.label}
+              leftSection={<item.icon size={18} />}
+              rightSection={
+                // Capped at 99+ rather than 9+: these count unopened records, which run into the
+                // hundreds on a busy DSR list, and "9+" would flatten 12 and 285 into the same
+                // badge. Not `circle` for the same reason - a 3-character count needs the room.
+                count > 0 ? (
+                  <Badge size="sm" color="red" variant="filled">{count > 99 ? '99+' : count}</Badge>
+                ) : null
+              }
+              active={location.pathname === item.path || location.pathname.startsWith(item.path + '/')}
+              onClick={() => navigate(item.path)}
+              variant="filled"
+            />
+          );
+        })}
       </AppShell.Navbar>
 
       <AppShell.Main>

@@ -1,12 +1,118 @@
-import { Stack, Title, SimpleGrid, Paper, Text, Group, RingProgress, Center, ScrollArea } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
-import { fetchDashboardSummary } from '../../api/dashboard';
+import { useState } from 'react';
+import { Stack, Title, SimpleGrid, Paper, Text, Group, RingProgress, Center, ScrollArea, Button, Modal, Textarea, Alert } from '@mantine/core';
+import { useForm } from '@mantine/form';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ban } from 'lucide-react';
+import { notifications } from '../../utils/toast';
+import { fetchDashboardSummary, fetchPendingCancellations } from '../../api/dashboard';
+import { approveOrderCancellation, rejectOrderCancellation } from '../../api/orders';
 import { useAuth } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import PageToolbar from '../../components/PageToolbar';
 import Tag from '../../components/Tag';
 
 function AED(n) {
   return `AED ${Number(n || 0).toLocaleString()}`;
+}
+
+// The Sales Head's queue for cancellation sign-off. It lives here rather than in Back Office
+// because the Sales Head has no `backoffice` module access to browse orders with - and this works
+// for directly-created orders too, which have no Pipeline deal to surface them on.
+function PendingCancellations() {
+  const queryClient = useQueryClient();
+  const confirm = useConfirm();
+  const [rejectRow, setRejectRow] = useState(null);
+  const { data } = useQuery({ queryKey: ['dashboard', 'pending-cancellations'], queryFn: fetchPendingCancellations });
+  const rows = data?.data || [];
+
+  const rejectForm = useForm({
+    initialValues: { reason: '' },
+    validate: { reason: (v) => (v?.trim() ? null : 'A reason is required to reject a cancellation request') },
+  });
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    queryClient.invalidateQueries({ queryKey: ['orders'] });
+  };
+
+  const handleApprove = async (row) => {
+    const ok = await confirm({
+      title: 'Approve this cancellation?',
+      message: `Order ${row.orderNo || row.dsrNo} (${row.customer}, ${AED(row.mrc)}) will be cancelled. The agent and Team Leader will be notified.`,
+      confirmLabel: 'Yes, cancel the order',
+      color: 'red',
+    });
+    if (!ok) return;
+    try {
+      await approveOrderCancellation(row._id);
+      notifications.show({ color: 'green', message: 'Cancellation approved — the order is now cancelled' });
+      refresh();
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Could not approve', message: err.response?.data?.error || 'Something went wrong' });
+    }
+  };
+
+  const handleReject = async (values) => {
+    try {
+      await rejectOrderCancellation(rejectRow._id, values.reason);
+      notifications.show({ color: 'green', message: 'Cancellation rejected — the order is unfrozen' });
+      setRejectRow(null);
+      rejectForm.reset();
+      refresh();
+    } catch (err) {
+      notifications.show({ color: 'red', title: 'Could not reject', message: err.response?.data?.error || 'Something went wrong' });
+    }
+  };
+
+  if (!rows.length) return null;
+
+  return (
+    <>
+      <Alert color="red" variant="light" icon={<Ban size={16} />} title={`${rows.length} order${rows.length === 1 ? '' : 's'} awaiting your cancellation decision`}>
+        <Stack gap="sm" mt="xs">
+          {rows.map((row) => (
+            <Paper key={row._id} withBorder p="sm" radius="sm">
+              <Group justify="space-between" align="flex-start" wrap="nowrap">
+                <div style={{ flex: 1 }}>
+                  <Group gap={6}>
+                    <Text size="sm" fw={600}>{row.orderNo || row.dsrNo}</Text>
+                    {row.direct && <Tag size="xs" color="grape">Direct</Tag>}
+                    <Text size="sm">— {row.customer}</Text>
+                    <Text size="sm" c="dimmed">({AED(row.mrc)}, {row.status})</Text>
+                  </Group>
+                  <Text size="xs" c="dimmed" mt={4}>
+                    {row.cancellationRequestedBy?.name || 'Someone'} · agent {row.agentId?.name || '—'}
+                    {row.cancellationRequestedAt ? ` · ${new Date(row.cancellationRequestedAt).toLocaleString()}` : ''}
+                  </Text>
+                  <Text size="sm" mt={4}>"{row.cancellationReason}"</Text>
+                </div>
+                <Group gap="xs" wrap="nowrap">
+                  <Button size="xs" color="red" onClick={() => handleApprove(row)}>Approve</Button>
+                  <Button size="xs" variant="default" onClick={() => setRejectRow(row)}>Reject</Button>
+                </Group>
+              </Group>
+            </Paper>
+          ))}
+        </Stack>
+      </Alert>
+
+      <Modal opened={!!rejectRow} onClose={() => { setRejectRow(null); rejectForm.reset(); }} title="Reject cancellation request" size="md">
+        <form onSubmit={rejectForm.onSubmit(handleReject)}>
+          <Stack gap="sm">
+            <Text size="sm">
+              Order <b>{rejectRow?.orderNo || rejectRow?.dsrNo}</b> ({rejectRow?.customer}) stays as it is and unfreezes.
+              The requester will see your reason.
+            </Text>
+            <Textarea label="Why are you rejecting this?" withAsterisk {...rejectForm.getInputProps('reason')} />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => { setRejectRow(null); rejectForm.reset(); }}>Cancel</Button>
+              <Button type="submit" color="red">Reject request</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+    </>
+  );
 }
 
 function StatCard({ label, value, sub, color }) {
@@ -32,6 +138,10 @@ export default function DashboardPage() {
         title={<Title order={1} size="h3">Dashboard</Title>}
         subtitle={`Welcome back, ${user.name} — here's what's happening in your scope.`}
       />
+
+      {/* Self-hiding when there's nothing to decide, so it never takes space from anyone who
+          isn't a Sales Head with a pending request. */}
+      <PendingCancellations />
 
       {!isLoading && s && (
         <>

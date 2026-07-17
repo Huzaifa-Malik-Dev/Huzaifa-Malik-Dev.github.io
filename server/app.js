@@ -17,6 +17,7 @@ const notificationRoutes = require('./routes/notifications');
 const userRoutes = require('./routes/users');
 const pipelineRoutes = require('./routes/pipeline');
 const orderRoutes = require('./routes/orders');
+const orderCancellationRoutes = require('./routes/orderCancellations');
 const accountingRoutes = require('./routes/accounting');
 const payrollRoutes = require('./routes/payroll');
 const adminRoutes = require('./routes/admin');
@@ -60,6 +61,10 @@ app.use('/dsr', dsrRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/users', userRoutes);
 app.use('/pipeline', pipelineRoutes);
+// Must be mounted BEFORE orderRoutes: routes/orders.js applies requireModule('backoffice') to
+// every request that reaches it via router.use(), so it would 403 a Sales Head/agent on their own
+// cancellation endpoints before Express ever got the chance to fall through to this router.
+app.use('/orders', orderCancellationRoutes);
 app.use('/orders', orderRoutes);
 app.use('/accounting', accountingRoutes);
 app.use('/payroll', payrollRoutes);

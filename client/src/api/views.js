@@ -1,12 +1,20 @@
 import api from './axios';
 
+export const fetchUnreadCounts = () => api.get('/views/unread-counts').then((r) => r.data);
+
 // Marks a record viewed by the current user (see server/services/recordViews.js) and
 // optimistically clears its `isNew` flag in every cached list matching queryKeyBase, so the row's
 // highlight (DataTable.jsx) disappears immediately on click instead of waiting for a refetch.
 // Fire-and-forget on the network call - a missed "mark viewed" is a cosmetic no-op, never worth
 // blocking or erroring the click that opened the record.
 export function markViewed(queryClient, queryKeyBase, module, id) {
-  api.post(`/views/${module}/${id}`).catch(() => {});
+  api
+    .post(`/views/${module}/${id}`)
+    // The sidebar badge counts exactly these unread rows, so it has to drop by one too - otherwise
+    // the highlight clears while the count sits there stale. Refetched rather than decremented
+    // locally so the number always comes from the server's own count.
+    .then(() => queryClient.invalidateQueries({ queryKey: ['views', 'unread-counts'] }))
+    .catch(() => {});
   queryClient.setQueriesData({ queryKey: queryKeyBase }, (old) => {
     // queryKeyBase is a prefix match, not an exact one - it can also catch a single-record query
     // sharing the same base key (e.g. Pipeline's ['pipeline', 'one', dealId], whose `data` is one
